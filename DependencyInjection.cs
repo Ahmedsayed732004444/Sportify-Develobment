@@ -1,4 +1,8 @@
 ﻿
+using Sportiva.Persistence.Repositories;
+using Sportiva.Repositories;
+using Sportiva.Services;
+
 namespace Sportiva;
 public static class DependencyInjection
 {
@@ -35,10 +39,13 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString));
 
         services
+            .AddAuthConfig(configuration)
             .AddMapsterConfig()
             .AddFluentValidationConfig();
         //
 
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IFileService, FileService>();
 
 
         services.AddHttpClient();
@@ -48,6 +55,11 @@ public static class DependencyInjection
             .BindConfiguration(nameof(MailSettings))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        services.AddOptions<CloudinarySettings>()
+           .BindConfiguration(nameof(CloudinarySettings))
+           .ValidateDataAnnotations()
+           .ValidateOnStart();
 
         return services;
     }

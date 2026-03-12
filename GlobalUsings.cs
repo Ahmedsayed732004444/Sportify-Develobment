@@ -36,5 +36,7 @@ global using System.Security.Claims;
 global using Microsoft.AspNetCore.Diagnostics;
 global using System.IdentityModel.Tokens.Jwt;
 global using System.Text.Json;
-
-
+global using Sportiva.Contracts.Authentication;
+global using Microsoft.AspNetCore.WebUtilities;
+global using System.Security.Cryptography;
+global using Sportiva.Specifications;
