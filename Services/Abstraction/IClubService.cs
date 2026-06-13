@@ -5,30 +5,24 @@ namespace Sportiva.Services;
 
 public interface IClubService
 {
-    // ── Queries ────────────────────────────────────────────────────
     Task<Result<ClubResponse>> GetClubAsync(
-        string clubId, string? currentUserId,
-        CancellationToken ct = default);
+        string clubId, string? currentUserId = null, CancellationToken ct = default);
 
-    Task<PaginatedList<ClubResponse>> GetClubsAsync(
-        string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
+    Task<Result<PaginatedList<ClubResponse>>> GetClubsAsync(
+        string? currentUserId, RequestFilters filters, CancellationToken ct = default);
 
-    /// <summary>Gets all clubs owned by a specific user.</summary>
-    Task<PaginatedList<ClubResponse>> GetClubsByOwnerAsync(
-        string ownerId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
     Task<Result<ClubResponse>> CreateClubAsync(
-        string ownerId, CreateClubRequest request,
-        CancellationToken ct = default);
+        string ownerId, CreateClubRequest request, CancellationToken ct = default);
 
     Task<Result<ClubResponse>> UpdateClubAsync(
-        string clubId, string currentUserId, UpdateClubRequest request,
-        CancellationToken ct = default);
-
+        string userId, string clubId, UpdateClubRequest request, CancellationToken ct = default);
+    //soft delete
     Task<Result> DeleteClubAsync(
-        string clubId, string currentUserId,
-        CancellationToken ct = default);
+        string userId, string clubId, CancellationToken ct = default);
+
+    Task<Result> ToggleClubStatusAsync(
+        string userId, string clubId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ClubResponse>>> GetMyClubsAsync(
+        string userId, RequestFilters filters, CancellationToken ct = default);
 }

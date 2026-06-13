@@ -2,7 +2,7 @@ namespace Sportiva.Contracts.Clubs;
 
 public record CreateClubRequest(
     string? Name,
-    string? LogoUrl,
+    IFormFile? Logo,
     string? Governorate,
     string? City,
     string? Address,

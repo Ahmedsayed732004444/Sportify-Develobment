@@ -78,7 +78,6 @@ Contracts/Common/RequestFilters.cs
 Contracts/Courts/CourtResponse.cs
 Contracts/Courts/CreateCourtRequest.cs
 Contracts/Courts/UpdateCourtRequest.cs
-Contracts/Followers/UserFollowResponse.cs
 Contracts/Matches/CreateFriendlyMatchRequest.cs
 Contracts/Matches/FriendlyMatchResponse.cs
 Contracts/Matches/JoinMatchRequest.cs
@@ -222,21 +221,9 @@ Properties/launchSettings.json
 README.md
 repomix.config.json
 Services/Abstraction/IAuthService.cs
-Services/Abstraction/IBookingService.cs
-Services/Abstraction/IClubService.cs
-Services/Abstraction/IClubSubscriptionService.cs
 Services/Abstraction/ICommentService.cs
-Services/Abstraction/ICourtService.cs
-Services/Abstraction/IFriendlyMatchService.cs
-Services/Abstraction/IMembershipUpgradeService.cs
-Services/Abstraction/IMessagingService.cs
-Services/Abstraction/INotificationService.cs
 Services/Abstraction/IPostService.cs
 Services/Abstraction/IProfileService.cs
-Services/Abstraction/IReviewService.cs
-Services/Abstraction/ISubscriptionPlanService.cs
-Services/Abstraction/ITimeSlotService.cs
-Services/Abstraction/ITournamentService.cs
 Services/Implementation/AuthService.cs
 Services/Implementation/CommentService.cs
 Services/Implementation/EmailService.cs
@@ -351,6 +338,48 @@ public record Error(string Code, string Description, int? StatusCode)
 }
 ```
 
+## File: Abstractions/PaginatedList.cs
+```csharp
+namespace Sportiva.Abstractions;
+
+public sealed class PaginatedList<T>
+{
+    public List<T> Items { get; init; }
+    public int PageNumber { get; init; }
+    public int PageSize { get; init; }
+    public int TotalCount { get; init; }
+    public int TotalPages { get; init; }
+    public bool HasPreviousPage => PageNumber > 1;
+    public bool HasNextPage => PageNumber < TotalPages;
+
+    private PaginatedList(List<T> items, int pageNumber, int pageSize, int totalCount)
+    {
+        Items = items;
+        PageNumber = pageNumber;
+        PageSize = pageSize;
+        TotalCount = totalCount;
+        TotalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+    }
+
+    public static async Task<PaginatedList<T>> CreateAsync(IQueryable<T> source, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    {
+
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageNumber, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+
+        var totalCount = await source.CountAsync(cancellationToken);
+        var items = await source
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PaginatedList<T>(items, pageNumber, pageSize, totalCount);
+
+    }
+}
+```
+
 ## File: Abstractions/Result.cs
 ```csharp
 namespace Sportiva.Abstractions;
@@ -419,6 +448,79 @@ public static class ResultExtensions
 
         return new ObjectResult(problemDetails);
     }
+}
+```
+
+## File: appsettings.json
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+
+  "AllowedHosts": "*",
+
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=.\\Ahmed1;Initial Catalog=ssss;Integrated Security=True;Encrypt=True;Trust Server Certificate=True",
+    "HangfireConnection": "Data Source=.\\Ahmed1;Initial Catalog=ssss;Integrated Security=True;Encrypt=True;Trust Server Certificate=True"
+  },
+
+  "Jwt": {
+    "Key": "jjkjfhhhjfbghbdfgbdfgbhbdfhgbdhbjvhbk",
+    "Issuer": "SurveyBasketApp",
+    "Audience": "SurveyBasketApp users",
+    "ExpiryMinutes": 30
+  },
+
+  "AppSettings": {
+    "FrontendOrigin": "https://front-end-project-bay-seven.vercel.app"
+  },
+
+  "Authentication": {
+    "Google": {
+      "ClientId": "1018203917478-m61lfh6qdo2uv1mqf59qc2osue4el2l9.apps.googleusercontent.com",
+      "ClientSecret": "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",
+      "RedirectUri": "/signin-google",
+      "Scopes": [ "openid", "profile", "email" ]
+    },
+    "GitHub": {
+      "ClientId": "Ov23liZQDMerjBEdPB71",
+      "ClientSecret": "0ac4f14d1a9b4d4b9e96194763bc53da11b5de0c",
+      "RedirectUri": "/signin-github",
+      "Scopes": [ "user:email", "read:user" ]
+    }
+  },
+
+  "MailSettings": {
+    "Mail": "sayed732004444@gmail.com",
+    "DisplayName": "Ahmed Elsayed",
+    "Password": "yxva ikie aqnm obix",
+    "Host": "smtp.gmail.com",
+    "Port": 587
+  },
+
+  "AllowedOrigins": [
+    "https://front-end-project-bay-seven.vercel.app",
+    "https://careerpathfinal.runasp.net",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://localhost:7283",
+    "http://localhost:5250"
+  ],
+
+  "AdzunaApi": {
+    "BaseUrl": "https://api.adzuna.com/v1/api",
+    "AppId": "0c2dc806",
+    "AppKey": "9c221969b8d228069a84d16ac3b204ce"
+  },
+
+  "HangfireSettings": {
+    "Username": "admin",
+    "Password": "admin"
+  }
 }
 ```
 
@@ -496,6 +598,17 @@ public class PermissionRequirement(string permission) : IAuthorizationRequiremen
 }
 ```
 
+## File: Authentication/IJwtProvider.cs
+```csharp
+namespace Sportiva.Authentication;
+
+public interface IJwtProvider
+{
+    (string token, int expiresIn) GenerateToken(ApplicationUser user, IEnumerable<string> roles, IEnumerable<string> permissions);
+    string? ValidateToken(string token, bool validateLifetime = true);
+}
+```
+
 ## File: Authentication/JwtOptions.cs
 ```csharp
 namespace Sportiva.Authentication;
@@ -516,6 +629,41 @@ public class JwtOptions
     [Range(1, int.MaxValue)]
     public int ExpiryMinutes { get; init; }
 }
+```
+
+## File: CancellationExceptionFilter.cs
+```csharp
+using Microsoft.AspNetCore.Mvc.Filters;
+
+// CancellationExceptionFilter.cs
+public class CancellationExceptionFilter : IAsyncExceptionFilter
+{
+    public Task OnExceptionAsync(ExceptionContext context)
+    {
+        if (context.Exception is OperationCanceledException)
+        {
+            context.Result = new StatusCodeResult(499);
+            context.ExceptionHandled = true;
+        }
+        return Task.CompletedTask;
+    }
+}
+```
+
+## File: Contracts/Authentication/AuthResponse.cs
+```csharp
+namespace Sportiva.Contracts.Authentication;
+
+public record AuthResponse(
+    string Id,
+    string? Email,
+    string FirstName,
+    string LastName,
+    string Token,
+    int ExpiresIn,
+    string RefreshToken,
+    DateTime RefreshTokenExpiration
+);
 ```
 
 ## File: Contracts/Authentication/ConfirmEmailRequest.cs
@@ -567,6 +715,16 @@ public class ForgetPasswordRequestValidator : AbstractValidator<ForgetPasswordRe
             .EmailAddress();
     }
 }
+```
+
+## File: Contracts/Authentication/LoginRequest.cs
+```csharp
+namespace Sportiva.Contracts.Authentication;
+
+public record LoginRequest(
+    string Email,
+    string Password
+);
 ```
 
 ## File: Contracts/Authentication/LoginRequestValidator.cs
@@ -709,2246 +867,6 @@ public class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequ
 }
 ```
 
-## File: Entities/ApplicationRole.cs
-```csharp
-namespace Sportiva.Entities;
-
-public class ApplicationRole : IdentityRole
-{
-    public ApplicationRole()
-    {
-        Id = Guid.CreateVersion7().ToString();
-    }
-
-    public bool IsDefault { get; set; }
-    public bool IsDeleted { get; set; }
-}
-```
-
-## File: Entities/FriendlyMatch.cs
-```csharp
-namespace Sportiva.Entities;
-
-public class FriendlyMatch
-{
-    public string Id { get; set; } = Guid.CreateVersion7().ToString();
-    public string OrganizerId { get; set; } = string.Empty;
-    public ApplicationUser Organizer { get; set; } = default!;
-    public string CourtId { get; set; } = string.Empty;
-    public Court Court { get; set; } = default!;
-
-    public DateOnly Date { get; set; }
-    public TimeOnly StartTime { get; set; }
-    public TimeOnly EndTime { get; set; }
-    public SportType SportType { get; set; } = SportType.Football;
-    public int RequiredPlayers { get; set; }
-    public MatchStatus Status { get; set; } = MatchStatus.Open;
-    public string? Note { get; set; }
-    public bool IsDeleted { get; set; } = false;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public ICollection<MatchJoinRequest> JoinRequests { get; set; } = [];
-}
-```
-
-## File: Entities/MatchJoinRequest.cs
-```csharp
-namespace Sportiva.Entities;
-
-public class MatchJoinRequest
-{
-    public string Id { get; set; } = Guid.CreateVersion7().ToString();
-    public string FriendlyMatchId { get; set; } = string.Empty;
-    public FriendlyMatch FriendlyMatch { get; set; } = default!;
-    public string PlayerId { get; set; } = string.Empty;
-    public ApplicationUser Player { get; set; } = default!;
-    public JoinRequestStatus Status { get; set; } = JoinRequestStatus.Pending;
-    public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
-}
-```
-
-## File: Entities/Review.cs
-```csharp
-namespace Sportiva.Entities;
-
-public class Review
-{
-    public string Id { get; set; } = Guid.CreateVersion7().ToString();
-    public string CourtId { get; set; } = string.Empty;
-    public Court Court { get; set; } = default!;
-    public string UserId { get; set; } = string.Empty;
-    public ApplicationUser User { get; set; } = default!;
-    public string BookingId { get; set; } = string.Empty;
-    public Booking Booking { get; set; } = default!;
-    public int Rating { get; set; }               // من 1 لـ 5
-    public string? Comment { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public bool IsDeleted { get; set; } = false;
-}
-```
-
-## File: Enums/BookingStatus.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum BookingStatus
-{
-    Pending,
-    Confirmed,
-    Cancelled,
-    Completed
-}
-```
-
-## File: Enums/JoinRequestStatus.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum JoinRequestStatus
-{
-    Pending,
-    Accepted,
-    Rejected
-}
-```
-
-## File: Enums/MatchStatus.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum MatchStatus
-{
-    Open,
-    Full,
-    InProgress,
-    Completed,
-    Cancelled
-}
-```
-
-## File: Enums/NotificationPriority.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum NotificationPriority
-{
-    Low,
-    Normal,
-    High
-}
-```
-
-## File: Enums/NotificationType.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum NotificationType
-{
-    NewFollower,
-    PostLiked,
-    PostCommented,
-    CommentReplied,
-    CommentReacted,
-    BookingConfirmed,
-    BookingCancelled,
-    BookingReminder,
-    MatchJoinRequestReceived,
-    MatchJoinRequestAccepted,
-    MatchJoinRequestRejected,
-    MatchFull,
-    NewMessage,
-    SecurityAlert,
-    GeneralInfo
-}
-```
-
-## File: Enums/PaymentStatus.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum PaymentStatus
-{
-    Pending,
-    Paid,
-    Failed,
-    Refunded
-}
-```
-
-## File: Enums/RequestStatus.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum RequestStatus
-{
-    Pending,
-    Approved,
-    Rejected
-}
-```
-
-## File: Enums/SportType.cs
-```csharp
-namespace Sportiva.Enums;
-
-public enum SportType
-{
-    Football,
-    Basketball,
-
-    Tennis,
-    Padel,
-    Volleyball,
-    Other
-}
-```
-
-## File: Helpers/EmailBodyBuilder.cs
-```csharp
-namespace Sportiva.Helpers
-{
-    public static class EmailBodyBuilder
-    {
-        private const string VerificationTemplate = @"
-<!DOCTYPE html>
-<html lang=""en"">
-<head>
-    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
-    <meta name=""x-apple-disable-message-reformatting"" />
-    <meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"" />
-    <meta name=""color-scheme"" content=""light dark"" />
-    <meta name=""supported-color-schemes"" content=""light dark"" />
-    <title></title>
-    <style type=""text/css"" rel=""stylesheet"" media=""all"">
-        /* Base ------------------------------ */
-
-        @import url(""https://fonts.googleapis.com/css?family=Nunito+Sans:400,700&display=swap"");
-        body {
-          width: 100% !important;
-          height: 100%;
-          margin: 0;
-          -webkit-text-size-adjust: none;
-        }
-
-        a {
-          color: #3869d4;
-        }
-
-        a img {
-          border: none;
-        }
-
-        td {
-          word-break: break-word;
-        }
-
-        .preheader {
-          display: none !important;
-          visibility: hidden;
-          mso-hide: all;
-          font-size: 1px;
-          line-height: 1px;
-          max-height: 0;
-          max-width: 0;
-          opacity: 0;
-          overflow: hidden;
-        }
-        /* Type ------------------------------ */
-
-        body,
-        td,
-        th {
-          font-family: ""Nunito Sans"", Helvetica, Arial, sans-serif;
-        }
-
-        h1 {
-          margin-top: 0;
-          color: #333333;
-          font-size: 22px;
-          font-weight: bold;
-          text-align: left;
-        }
-
-        h2 {
-          margin-top: 0;
-          color: #333333;
-          font-size: 16px;
-          font-weight: bold;
-          text-align: left;
-        }
-
-        h3 {
-          margin-top: 0;
-          color: #333333;
-          font-size: 14px;
-          font-weight: bold;
-          text-align: left;
-        }
-
-        td,
-        th {
-          font-size: 16px;
-        }
-
-        p,
-        ul,
-        ol,
-        blockquote {
-          margin: 0.4em 0 1.1875em;
-          font-size: 16px;
-          line-height: 1.625;
-        }
-
-        p.sub {
-          font-size: 13px;
-        }
-        /* Utilities ------------------------------ */
-
-        .align-right {
-          text-align: right;
-        }
-
-        .align-left {
-          text-align: left;
-        }
-
-        .align-center {
-          text-align: center;
-        }
-
-        .u-margin-bottom-none {
-          margin-bottom: 0;
-        }
-        /* Buttons ------------------------------ */
-
-        .button {
-          background-color: #3869d4;
-          border-top: 10px solid #3869d4;
-          border-right: 18px solid #3869d4;
-          border-bottom: 10px solid #3869d4;
-          border-left: 18px solid #3869d4;
-          display: inline-block;
-          color: #fff;
-          text-decoration: none;
-          border-radius: 3px;
-          box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
-          -webkit-text-size-adjust: none;
-          box-sizing: border-box;
-        }
-
-        .button--green {
-          background-color: #22bc66;
-          border-top: 10px solid #22bc66;
-          border-right: 18px solid #22bc66;
-          border-bottom: 10px solid #22bc66;
-          border-left: 18px solid #22bc66;
-        }
-
-        .button--red {
-          background-color: #ff6136;
-          border-top: 10px solid #ff6136;
-          border-right: 18px solid #ff6136;
-          border-bottom: 10px solid #ff6136;
-          border-left: 18px solid #ff6136;
-        }
-
-        @media only screen and (max-width: 500px) {
-          .button {
-            width: 100% !important;
-            text-align: center !important;
-          }
-        }
-        /* Attribute list ------------------------------ */
-
-        .attributes {
-          margin: 0 0 21px;
-        }
-
-        .attributes_content {
-          background-color: #f4f4f7;
-          padding: 16px;
-        }
-
-        .attributes_item {
-          padding: 0;
-        }
-        /* Related Items ------------------------------ */
-
-        .related {
-          width: 100%;
-          margin: 0;
-          padding: 25px 0 0 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-        }
-
-        .related_item {
-          padding: 10px 0;
-          color: #cbcccf;
-          font-size: 15px;
-          line-height: 18px;
-        }
-
-        .related_item-title {
-          display: block;
-          margin: 0.5em 0 0;
-        }
-
-        .related_item-thumb {
-          display: block;
-          padding-bottom: 10px;
-        }
-
-        .related_heading {
-          border-top: 1px solid #cbcccf;
-          text-align: center;
-          padding: 25px 0 10px;
-        }
-        /* Discount Code ------------------------------ */
-
-        .discount {
-          width: 100%;
-          margin: 0;
-          padding: 24px;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-          background-color: #f4f4f7;
-          border: 2px dashed #cbcccf;
-        }
-
-        .discount_heading {
-          text-align: center;
-        }
-
-        .discount_body {
-          text-align: center;
-          font-size: 15px;
-        }
-        /* Social Icons ------------------------------ */
-
-        .social {
-          width: auto;
-        }
-
-        .social td {
-          padding: 0;
-          width: auto;
-        }
-
-        .social_icon {
-          height: 20px;
-          margin: 0 8px 10px 8px;
-          padding: 0;
-        }
-        /* Data table ------------------------------ */
-
-        .purchase {
-          width: 100%;
-          margin: 0;
-          padding: 35px 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-        }
-
-        .purchase_content {
-          width: 100%;
-          margin: 0;
-          padding: 25px 0 0 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-        }
-
-        .purchase_item {
-          padding: 10px 0;
-          color: #51545e;
-          font-size: 15px;
-          line-height: 18px;
-        }
-
-        .purchase_heading {
-          padding-bottom: 8px;
-          border-bottom: 1px solid #eaeaec;
-        }
-
-        .purchase_heading p {
-          margin: 0;
-          color: #85878e;
-          font-size: 12px;
-        }
-
-        .purchase_footer {
-          padding-top: 15px;
-          border-top: 1px solid #eaeaec;
-        }
-
-        .purchase_total {
-          margin: 0;
-          text-align: right;
-          font-weight: bold;
-          color: #333333;
-        }
-
-        .purchase_total--label {
-          padding: 0 15px 0 0;
-        }
-
-        body {
-          background-color: #f2f4f6;
-          color: #51545e;
-        }
-
-        p {
-          color: #51545e;
-        }
-
-        .email-wrapper {
-          width: 100%;
-          margin: 0;
-          padding: 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-          background-color: #f2f4f6;
-        }
-
-        .email-content {
-          width: 100%;
-          margin: 0;
-          padding: 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-        }
-        /* Masthead ----------------------- */
-
-        .email-masthead {
-          padding: 25px 0;
-          text-align: center;
-        }
-
-        .email-masthead_logo {
-          width: 94px;
-        }
-
-        .email-masthead_name {
-          font-size: 16px;
-          font-weight: bold;
-          color: #a8aaaf;
-          text-decoration: none;
-          text-shadow: 0 1px 0 white;
-        }
-        /* Body ------------------------------ */
-
-        .email-body {
-          width: 100%;
-          margin: 0;
-          padding: 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-        }
-
-        .email-body_inner {
-          width: 570px;
-          margin: 0 auto;
-          padding: 0;
-          -premailer-width: 570px;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-          background-color: #ffffff;
-        }
-
-        .email-footer {
-          width: 570px;
-          margin: 0 auto;
-          padding: 0;
-          -premailer-width: 570px;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-          text-align: center;
-        }
-
-        .email-footer p {
-          color: #a8aaaf;
-        }
-
-        .body-action {
-          width: 100%;
-          margin: 30px auto;
-          padding: 0;
-          -premailer-width: 100%;
-          -premailer-cellpadding: 0;
-          -premailer-cellspacing: 0;
-          text-align: center;
-        }
-
-        .body-sub {
-          margin-top: 25px;
-          padding-top: 25px;
-          border-top: 1px solid #eaeaec;
-        }
-
-        .content-cell {
-          padding: 45px;
-        }
-        /*Media Queries ------------------------------ */
-
-        @media only screen and (max-width: 600px) {
-          .email-body_inner,
-          .email-footer {
-            width: 100% !important;
-          }
-        }
-
-        @media (prefers-color-scheme: dark) {
-          body,
-          .email-body,
-          .email-body_inner,
-          .email-content,
-          .email-wrapper,
-          .email-masthead,
-          .email-footer {
-            background-color: #333333 !important;
-            color: #fff !important;
-          }
-          p,
-          ul,
-          ol,
-          blockquote,
-          h1,
-          h2,
-          h3,
-          span,
-          .purchase_item {
-            color: #fff !important;
-          }
-          .attributes_content,
-          .discount {
-            background-color: #222 !important;
-          }
-          .email-masthead_name {
-            text-shadow: none !important;
-          }
-        }
-
-        :root {
-          color-scheme: light dark;
-          supported-color-schemes: light dark;
-        }
-    </style>
-    <!--[if mso]>
-      <style type=""text/css"">
-        .f-fallback {
-          font-family: Arial, sans-serif;
-        }
-      </style>
-    <![endif]-->
-</head>
-<body>
-    <span class=""preheader"">
-        Use this link to reset your password. The link is only valid for 24
-        hours.
-    </span>
-    <table class=""email-wrapper""
-           width=""100%""
-           cellpadding=""0""
-           cellspacing=""0""
-           role=""presentation"">
-        <tr>
-            <td align=""center"">
-                <table class=""email-content""
-                       width=""100%""
-                       cellpadding=""0""
-                       cellspacing=""0""
-                       role=""presentation"">
-                    <tr>
-                        <td class=""email-masthead"">
-                            <a href=""https://example.com""
-                               class=""f-fallback email-masthead_name"">
-                                Career Path
-                            </a>
-                        </td>
-                    </tr>
-                    <!-- Email Body -->
-                    <tr>
-                        <td class=""email-body""
-                            width=""570""
-                            cellpadding=""0""
-                            cellspacing=""0"">
-                            <table class=""email-body_inner""
-                                   align=""center""
-                                   width=""570""
-                                   cellpadding=""0""
-                                   cellspacing=""0""
-                                   role=""presentation"">
-                                <!-- Body content -->
-                                <tr>
-                                    <td class=""content-cell"">
-                                        <div class=""f-fallback"">
-                                            <h1>Hi {{name}},</h1>
-                                            <p>
-                                                To confirm your email, please click the button below:
-                                            </p>
-                                            <!-- Action -->
-                                            <table class=""body-action""
-                                                   align=""center""
-                                                   width=""100%""
-                                                   cellpadding=""0""
-                                                   cellspacing=""0""
-                                                   role=""presentation"">
-                                                <tr>
-                                                    <td align=""center"">
-                                                        <!-- Border based button
-                                                        https://litmus.com/blog/a-guide-to-bulletproof-buttons-in-email-design -->
-                                                        <table width=""100%""
-                                                               border=""0""
-                                                               cellspacing=""0""
-                                                               cellpadding=""0""
-                                                               role=""presentation"">
-                                                            <tr>
-                                                                <td align=""center"">
-                                                                    <a href=""{{action_url}}""
-                                                                       class=""f-fallback button button--green""
-                                                                       target=""_blank"">Verify email address</a>
-                                                                </td>
-                                                            </tr>
-                                                        </table>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                            <p>Thanks, <br />Career Path team</p>
-                                            <!-- Sub copy -->
-                                            <table class=""body-sub"" role=""presentation"">
-                                                <tr>
-                                                    <td>
-                                                        <p class=""f-fallback sub"">
-                                                            If you’re having trouble with the button above,
-                                                            copy and paste the URL below into your web
-                                                            browser.
-                                                        </p>
-                                                        <p class=""f-fallback sub"">{{action_url}}</p>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <table class=""email-footer""
-                                   align=""center""
-                                   width=""570""
-                                   cellpadding=""0""
-                                   cellspacing=""0""
-                                   role=""presentation"">
-                                <tr>
-                                    <td class=""content-cell"" align=""center"">
-                                        <p class=""f-fallback sub align-center"">
-                                            Career Path
-                                            <br />1234 Street Rd. <br />Cairo, Egypt
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>";
-        public static string GenerateEmailBody(Dictionary<string, string> emailBody)
-        {
-            string temp = VerificationTemplate;
-
-            foreach (var item in emailBody)
-            {
-                temp = temp.Replace(item.Key, item.Value);
-            }
-
-            return temp;
-        }
-    }
-}
-```
-
-## File: Helpers/FileHelper.cs
-```csharp
-namespace Sportiva.Helpers
-{
-    public class FileHelper
-    {
-        public async static Task<string> UploadeFileAsync(IFormFile file, string location, IWebHostEnvironment env, IHttpContextAccessor accessor)
-        {
-            if (file is null)
-                return null;
-            var path = Path.Combine(env.WebRootPath, location);
-
-            if (!Directory.Exists(path))
-                Directory.CreateDirectory(path);
-
-            var extention = Path.GetExtension(file.FileName);
-            var fileName = Guid.NewGuid().ToString().Replace("-", string.Empty);
-
-            var fullPath = Path.Combine(path, fileName + extention);
-
-            using (FileStream stream = new FileStream(fullPath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-
-            }
-            var origin = accessor.HttpContext?.Request;
-
-            return $"{origin.Scheme}://{origin.Host}/{location}/{fileName}{extention}";
-        }
-
-        //DeleteFile عمليه سريعه جدا علي الكورس
-        public static void DeleteFile(string oldPath, string location, IWebHostEnvironment env)
-        {
-            if (string.IsNullOrEmpty(oldPath))
-                return;
-
-            var fileName = Path.GetFileName(new Uri(oldPath).LocalPath);
-            var path = Path.Combine(env.WebRootPath, location, fileName);
-
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-    }
-}
-```
-
-## File: Helpers/ForgetPasswordBodyBuilder.cs
-```csharp
-namespace Sportiva.Helpers
-{
-    public static class ForgetPasswordBodyBuilder
-    {
-        private const string ForgotPasswordTemplate = @"
-<!DOCTYPE html>
-<html lang=""en"">
-  <head>
-    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
-    <meta name=""x-apple-disable-message-reformatting"" />
-    <meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"" />
-    <meta name=""color-scheme"" content=""light dark"" />
-    <meta name=""supported-color-schemes"" content=""light dark"" />
-    <title></title>
-    <style type=""text/css"" rel=""stylesheet"" media=""all"">
-      /* Base ------------------------------ */
-
-      @import url(""https://fonts.googleapis.com/css?family=Nunito+Sans:400,700&display=swap"");
-      body {
-        width: 100% !important;
-        height: 100%;
-        margin: 0;
-        -webkit-text-size-adjust: none;
-      }
-
-      a {
-        color: #3869d4;
-      }
-
-      a img {
-        border: none;
-      }
-
-      td {
-        word-break: break-word;
-      }
-
-      .preheader {
-        display: none !important;
-        visibility: hidden;
-        mso-hide: all;
-        font-size: 1px;
-        line-height: 1px;
-        max-height: 0;
-        max-width: 0;
-        opacity: 0;
-        overflow: hidden;
-      }
-      /* Type ------------------------------ */
-
-      body,
-      td,
-      th {
-        font-family: ""Nunito Sans"", Helvetica, Arial, sans-serif;
-      }
-
-      h1 {
-        margin-top: 0;
-        color: #333333;
-        font-size: 22px;
-        font-weight: bold;
-        text-align: left;
-      }
-
-      h2 {
-        margin-top: 0;
-        color: #333333;
-        font-size: 16px;
-        font-weight: bold;
-        text-align: left;
-      }
-
-      h3 {
-        margin-top: 0;
-        color: #333333;
-        font-size: 14px;
-        font-weight: bold;
-        text-align: left;
-      }
-
-      td,
-      th {
-        font-size: 16px;
-      }
-
-      p,
-      ul,
-      ol,
-      blockquote {
-        margin: 0.4em 0 1.1875em;
-        font-size: 16px;
-        line-height: 1.625;
-      }
-
-      p.sub {
-        font-size: 13px;
-      }
-      /* Utilities ------------------------------ */
-
-      .align-right {
-        text-align: right;
-      }
-
-      .align-left {
-        text-align: left;
-      }
-
-      .align-center {
-        text-align: center;
-      }
-
-      .u-margin-bottom-none {
-        margin-bottom: 0;
-      }
-      /* Buttons ------------------------------ */
-
-      .button {
-        background-color: #3869d4;
-        border-top: 10px solid #3869d4;
-        border-right: 18px solid #3869d4;
-        border-bottom: 10px solid #3869d4;
-        border-left: 18px solid #3869d4;
-        display: inline-block;
-        color: #fff;
-        text-decoration: none;
-        border-radius: 3px;
-        box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
-        -webkit-text-size-adjust: none;
-        box-sizing: border-box;
-      }
-
-      .button--green {
-        background-color: #22bc66;
-        border-top: 10px solid #22bc66;
-        border-right: 18px solid #22bc66;
-        border-bottom: 10px solid #22bc66;
-        border-left: 18px solid #22bc66;
-      }
-
-      .button--red {
-        background-color: #ff6136;
-        border-top: 10px solid #ff6136;
-        border-right: 18px solid #ff6136;
-        border-bottom: 10px solid #ff6136;
-        border-left: 18px solid #ff6136;
-      }
-
-      @media only screen and (max-width: 500px) {
-        .button {
-          width: 100% !important;
-          text-align: center !important;
-        }
-      }
-      /* Attribute list ------------------------------ */
-
-      .attributes {
-        margin: 0 0 21px;
-      }
-
-      .attributes_content {
-        background-color: #f4f4f7;
-        padding: 16px;
-      }
-
-      .attributes_item {
-        padding: 0;
-      }
-      /* Related Items ------------------------------ */
-
-      .related {
-        width: 100%;
-        margin: 0;
-        padding: 25px 0 0 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-      }
-
-      .related_item {
-        padding: 10px 0;
-        color: #cbcccf;
-        font-size: 15px;
-        line-height: 18px;
-      }
-
-      .related_item-title {
-        display: block;
-        margin: 0.5em 0 0;
-      }
-
-      .related_item-thumb {
-        display: block;
-        padding-bottom: 10px;
-      }
-
-      .related_heading {
-        border-top: 1px solid #cbcccf;
-        text-align: center;
-        padding: 25px 0 10px;
-      }
-      /* Discount Code ------------------------------ */
-
-      .discount {
-        width: 100%;
-        margin: 0;
-        padding: 24px;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-        background-color: #f4f4f7;
-        border: 2px dashed #cbcccf;
-      }
-
-      .discount_heading {
-        text-align: center;
-      }
-
-      .discount_body {
-        text-align: center;
-        font-size: 15px;
-      }
-      /* Social Icons ------------------------------ */
-
-      .social {
-        width: auto;
-      }
-
-      .social td {
-        padding: 0;
-        width: auto;
-      }
-
-      .social_icon {
-        height: 20px;
-        margin: 0 8px 10px 8px;
-        padding: 0;
-      }
-      /* Data table ------------------------------ */
-
-      .purchase {
-        width: 100%;
-        margin: 0;
-        padding: 35px 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-      }
-
-      .purchase_content {
-        width: 100%;
-        margin: 0;
-        padding: 25px 0 0 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-      }
-
-      .purchase_item {
-        padding: 10px 0;
-        color: #51545e;
-        font-size: 15px;
-        line-height: 18px;
-      }
-
-      .purchase_heading {
-        padding-bottom: 8px;
-        border-bottom: 1px solid #eaeaec;
-      }
-
-      .purchase_heading p {
-        margin: 0;
-        color: #85878e;
-        font-size: 12px;
-      }
-
-      .purchase_footer {
-        padding-top: 15px;
-        border-top: 1px solid #eaeaec;
-      }
-
-      .purchase_total {
-        margin: 0;
-        text-align: right;
-        font-weight: bold;
-        color: #333333;
-      }
-
-      .purchase_total--label {
-        padding: 0 15px 0 0;
-      }
-
-      body {
-        background-color: #f2f4f6;
-        color: #51545e;
-      }
-
-      p {
-        color: #51545e;
-      }
-
-      .email-wrapper {
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-        background-color: #f2f4f6;
-      }
-
-      .email-content {
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-      }
-      /* Masthead ----------------------- */
-
-      .email-masthead {
-        padding: 25px 0;
-        text-align: center;
-      }
-
-      .email-masthead_logo {
-        width: 94px;
-      }
-
-      .email-masthead_name {
-        font-size: 16px;
-        font-weight: bold;
-        color: #a8aaaf;
-        text-decoration: none;
-        text-shadow: 0 1px 0 white;
-      }
-      /* Body ------------------------------ */
-
-      .email-body {
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-      }
-
-      .email-body_inner {
-        width: 570px;
-        margin: 0 auto;
-        padding: 0;
-        -premailer-width: 570px;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-        background-color: #ffffff;
-      }
-
-      .email-footer {
-        width: 570px;
-        margin: 0 auto;
-        padding: 0;
-        -premailer-width: 570px;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-        text-align: center;
-      }
-
-      .body-action {
-        width: 100%;
-        margin: 30px auto;
-        padding: 0;
-        -premailer-width: 100%;
-        -premailer-cellpadding: 0;
-        -premailer-cellspacing: 0;
-        text-align: center;
-      }
-
-      .body-sub {
-        margin-top: 25px;
-        padding-top: 25px;
-        border-top: 1px solid #eaeaec;
-      }
-
-      .content-cell {
-        padding: 45px;
-      }
-    </style>
-  </head>
-  <body>
-    <span class=""preheader"">
-      Use this link to reset your password. The link is only valid for 24 hours.
-    </span>
-    <table class=""email-wrapper"" width=""100%"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
-      <tr>
-        <td align=""center"">
-          <table class=""email-content"" width=""100%"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
-            <tr>
-              <td class=""email-masthead"">
-                <a href=""https://example.com"" class=""f-fallback email-masthead_name"">
-                  Career Path
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td class=""email-body"" width=""570"" cellpadding=""0"" cellspacing=""0"">
-                <table class=""email-body_inner"" align=""center"" width=""570"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
-                  <tr>
-                    <td class=""content-cell"">
-                      <div class=""f-fallback"">
-                        <h1>Hi {{name}},</h1>
-                        <p>You recently requested to reset your password for your Career Path account. Use the button below to reset it.</p>
-                        <table class=""body-action"" align=""center"" width=""100%"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
-                          <tr>
-                            <td align=""center"">
-                              <table width=""100%"" border=""0"" cellspacing=""0"" cellpadding=""0"" role=""presentation"">
-                                <tr>
-                                  <td align=""center"">
-                                    <a href=""{{action_url}}"" class=""f-fallback button button--green"" target=""_blank"">Reset your password</a>
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                        </table>
-                        <p>Thanks, <br />The Career Path team</p>
-                        <table class=""body-sub"" role=""presentation"">
-                          <tr>
-                            <td>
-                              <p class=""f-fallback sub"">If you’re having trouble with the button above, copy and paste the URL below into your web browser.</p>
-                              <p class=""f-fallback sub"">{{action_url}}</p>
-                            </td>
-                          </tr>
-                        </table>
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <table class=""email-footer"" align=""center"" width=""570"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
-                  <tr>
-                    <td class=""content-cell"" align=""center"">
-                      <p class=""f-fallback sub align-center"">
-                        Career Path
-                        <br />1234 Street Rd. <br />Cairo, Egypt
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>";
-
-        public static string GenerateEmailBody(Dictionary<string, string> emailBody)
-        {
-            string temp = ForgotPasswordTemplate;
-
-            foreach (var item in emailBody)
-            {
-                temp = temp.Replace(item.Key, item.Value);
-            }
-
-            return temp;
-        }
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/ClubSubscriptionConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class ClubSubscriptionConfiguration : IEntityTypeConfiguration<ClubSubscription>
-{
-    public void Configure(EntityTypeBuilder<ClubSubscription> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Ignore(x => x.IsActive); // Computed property
-
-        builder.HasIndex(x => new { x.ClubId, x.EndDate });
-
-        builder.HasOne(x => x.Plan)
-               .WithMany(p => p.ClubSubscriptions)
-               .HasForeignKey(x => x.PlanId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasMany(x => x.Payments)
-               .WithOne(p => p.ClubSubscription)
-               .HasForeignKey(p => p.ClubSubscriptionId)
-               .OnDelete(DeleteBehavior.Cascade);
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/FriendlyMatchConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class FriendlyMatchConfiguration : IEntityTypeConfiguration<FriendlyMatch>
-{
-    public void Configure(EntityTypeBuilder<FriendlyMatch> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.SportType)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        builder.Property(x => x.Status)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        builder.Property(x => x.Note).HasMaxLength(500);
-
-        builder.HasQueryFilter(x => !x.IsDeleted);
-
-        builder.HasIndex(x => new { x.Date, x.Status });
-
-        builder.HasOne(x => x.Organizer)
-               .WithMany(u => u.OrganizedMatches)
-               .HasForeignKey(x => x.OrganizerId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.Court)
-               .WithMany()
-               .HasForeignKey(x => x.CourtId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasMany(x => x.JoinRequests)
-               .WithOne(r => r.FriendlyMatch)
-               .HasForeignKey(r => r.FriendlyMatchId)
-               .OnDelete(DeleteBehavior.Cascade);
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/MatchJoinRequestConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class MatchJoinRequestConfiguration : IEntityTypeConfiguration<MatchJoinRequest>
-{
-    public void Configure(EntityTypeBuilder<MatchJoinRequest> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.Status)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        // لاعب واحد يقدر يطلب انضمام مرة واحدة لكل ماتش
-        builder.HasIndex(x => new { x.FriendlyMatchId, x.PlayerId }).IsUnique();
-
-        builder.HasOne(x => x.FriendlyMatch)
-               .WithMany(m => m.JoinRequests)
-               .HasForeignKey(x => x.FriendlyMatchId)
-               .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasOne(x => x.Player)
-               .WithMany(u => u.MatchJoinRequests)
-               .HasForeignKey(x => x.PlayerId)
-               .OnDelete(DeleteBehavior.Restrict);
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/MembershipUpgradeConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class MembershipUpgradeConfiguration : IEntityTypeConfiguration<MembershipUpgrade>
-{
-    public void Configure(EntityTypeBuilder<MembershipUpgrade> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.Status)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        builder.Property(x => x.Note).HasMaxLength(500);
-
-        builder.HasOne(x => x.User)
-               .WithMany(u => u.MembershipUpgradeRequests)
-               .HasForeignKey(x => x.UserId)
-               .OnDelete(DeleteBehavior.Restrict);
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/ReviewConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class ReviewConfiguration : IEntityTypeConfiguration<Review>
-{
-    public void Configure(EntityTypeBuilder<Review> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.Rating)
-               .IsRequired();
-
-        // Rating لازم يكون بين 1 و 5
-        builder.ToTable(t => t.HasCheckConstraint("CK_Review_Rating", "[Rating] >= 1 AND [Rating] <= 5"));
-
-        builder.Property(x => x.Comment).HasMaxLength(1000);
-
-        builder.HasQueryFilter(x => !x.IsDeleted);
-
-        // يوزر واحد يعمل review واحد على كل booking
-        builder.HasIndex(x => new { x.UserId, x.BookingId }).IsUnique();
-
-        builder.HasOne(x => x.Court)
-               .WithMany()
-               .HasForeignKey(x => x.CourtId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.User)
-               .WithMany()
-               .HasForeignKey(x => x.UserId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.Booking)
-               .WithMany()
-               .HasForeignKey(x => x.BookingId)
-               .OnDelete(DeleteBehavior.Restrict);
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/SubscriptionPaymentConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class SubscriptionPaymentConfiguration : IEntityTypeConfiguration<SubscriptionPayment>
-{
-    public void Configure(EntityTypeBuilder<SubscriptionPayment> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.Amount)
-               .HasColumnType("decimal(18,2)")
-               .IsRequired();
-
-        builder.Property(x => x.Status)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        builder.Property(x => x.TransactionId).HasMaxLength(200);
-
-        builder.HasOne(x => x.ClubSubscription)
-               .WithMany(cs => cs.Payments)
-               .HasForeignKey(x => x.ClubSubscriptionId)
-               .OnDelete(DeleteBehavior.Cascade);
-    }
-}
-```
-
-## File: Properties/launchSettings.json
-```json
-{
-  "$schema": "https://json.schemastore.org/launchsettings.json",
-  "profiles": {
-    "http": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "launchUrl": "swagger",
-      "applicationUrl": "http://localhost:5250",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    },
-    "https": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "launchUrl": "swagger",
-      "applicationUrl": "https://localhost:7283;http://localhost:5250",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    }
-  }
-}
-```
-
-## File: Services/Abstraction/IBookingService.cs
-```csharp
-using Sportiva.Contracts.Bookings;
-using Sportiva.Contracts.Common;
-
-namespace Sportiva.Services;
-
-public interface IBookingService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<BookingResponse>> GetBookingAsync(
-        string bookingId, string currentUserId,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<BookingResponse>> GetMyBookingsAsync(
-        string userId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    /// <summary>Admin / club-owner view of all bookings for a court.</summary>
-    Task<PaginatedList<BookingResponse>> GetBookingsByCourtAsync(
-        string courtId, string currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
-    /// <summary>
-    /// Creates a booking (status = Pending). Marks the TimeSlot as booked.
-    /// </summary>
-    Task<Result<BookingResponse>> CreateBookingAsync(
-        string userId, CreateBookingRequest request,
-        CancellationToken ct = default);
-
-    /// <summary>Club owner confirms a pending booking → Confirmed.</summary>
-    Task<Result<BookingResponse>> ConfirmBookingAsync(
-        string bookingId, string currentUserId,
-        CancellationToken ct = default);
-
-    /// <summary>User or club owner cancels a booking → Cancelled.</summary>
-    Task<Result> CancelBookingAsync(
-        string bookingId, string currentUserId,
-        CancellationToken ct = default);
-
-    /// <summary>
-    /// Marks a confirmed booking as Completed (e.g. scheduled job after EndTime).
-    /// </summary>
-    Task<Result> CompleteBookingAsync(
-        string bookingId, CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/IClubService.cs
-```csharp
-using Sportiva.Contracts.Clubs;
-using Sportiva.Contracts.Common;
-
-namespace Sportiva.Services;
-
-public interface IClubService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<ClubResponse>> GetClubAsync(
-        string clubId, string? currentUserId,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<ClubResponse>> GetClubsAsync(
-        string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    /// <summary>Gets all clubs owned by a specific user.</summary>
-    Task<PaginatedList<ClubResponse>> GetClubsByOwnerAsync(
-        string ownerId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
-    Task<Result<ClubResponse>> CreateClubAsync(
-        string ownerId, CreateClubRequest request,
-        CancellationToken ct = default);
-
-    Task<Result<ClubResponse>> UpdateClubAsync(
-        string clubId, string currentUserId, UpdateClubRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> DeleteClubAsync(
-        string clubId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/IClubSubscriptionService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Subscriptions;
-
-namespace Sportiva.Services;
-
-public interface IClubSubscriptionService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<ClubSubscriptionResponse>> GetSubscriptionAsync(
-        string subscriptionId, string currentUserId,
-        CancellationToken ct = default);
-
-    /// <summary>Returns all (active + historical) subscriptions for a club.</summary>
-    Task<PaginatedList<ClubSubscriptionResponse>> GetClubSubscriptionsAsync(
-        string clubId, string currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands (Admin) ───────────────────────────────────────────
-    Task<Result<ClubSubscriptionResponse>> CreateSubscriptionAsync(
-        CreateClubSubscriptionRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> CancelSubscriptionAsync(
-        string subscriptionId, string currentUserId,
-        CancellationToken ct = default);
-
-    // ── Payments ───────────────────────────────────────────────────
-    /// <summary>Lists all payments for a given subscription.</summary>
-    Task<PaginatedList<SubscriptionPaymentSummary>> GetSubscriptionPaymentsAsync(
-        string subscriptionId, string currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    /// <summary>Records/confirms a payment (webhook or manual admin action).</summary>
-    //Task<Result<SubscriptionPaymentSummary>> RecordPaymentAsync(
-    //    string subscriptionId, RecordSubscriptionPaymentRequest request,
-    //    CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/ICourtService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Courts;
-
-namespace Sportiva.Services;
-
-public interface ICourtService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<CourtResponse>> GetCourtAsync(
-        string courtId, string? currentUserId,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<CourtResponse>> GetCourtsByClubAsync(
-        string clubId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<CourtResponse>> GetCourtsAsync(
-        string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
-    Task<Result<CourtResponse>> CreateCourtAsync(
-        string currentUserId, CreateCourtRequest request,
-        CancellationToken ct = default);
-
-    Task<Result<CourtResponse>> UpdateCourtAsync(
-        string courtId, string currentUserId, UpdateCourtRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> DeleteCourtAsync(
-        string courtId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/IFriendlyMatchService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Matches;
-
-namespace Sportiva.Services;
-
-public interface IFriendlyMatchService
-{
-    // ── Match Queries ──────────────────────────────────────────────
-    Task<Result<FriendlyMatchResponse>> GetMatchAsync(
-        string matchId, string? currentUserId,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<FriendlyMatchResponse>> GetMatchesAsync(
-        string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<FriendlyMatchResponse>> GetMatchesByOrganizerAsync(
-        string organizerId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    /// <summary>Returns matches the current user has joined.</summary>
-    Task<PaginatedList<FriendlyMatchResponse>> GetMyMatchesAsync(
-        string userId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Match Commands ─────────────────────────────────────────────
-    Task<Result<FriendlyMatchResponse>> CreateMatchAsync(
-        string organizerId, CreateFriendlyMatchRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> CancelMatchAsync(
-        string matchId, string currentUserId,
-        CancellationToken ct = default);
-
-    // ── Join Request Queries ───────────────────────────────────────
-    /// <summary>Organizer views all join requests for their match.</summary>
-    Task<PaginatedList<MatchJoinRequestResponse>> GetJoinRequestsAsync(
-        string matchId, string currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Join Request Commands ──────────────────────────────────────
-    /// <summary>Player submits a request to join a match.</summary>
-    Task<Result<MatchJoinRequestResponse>> RequestToJoinAsync(
-        string userId, JoinMatchRequest request,
-        CancellationToken ct = default);
-
-    /// <summary>Organizer accepts or rejects a join request.</summary>
-    Task<Result<MatchJoinRequestResponse>> ReviewJoinRequestAsync(
-        string requestId, string currentUserId, ReviewJoinRequestRequest request,
-        CancellationToken ct = default);
-
-    /// <summary>Player withdraws their own pending join request.</summary>
-    Task<Result> WithdrawJoinRequestAsync(
-        string requestId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/IMembershipUpgradeService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Memberships;
-
-namespace Sportiva.Services;
-
-public interface IMembershipUpgradeService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<MembershipUpgradeResponse>> GetRequestAsync(
-        string requestId, string currentUserId,
-        CancellationToken ct = default);
-
-    /// <summary>User's own request history.</summary>
-    Task<PaginatedList<MembershipUpgradeResponse>> GetMyRequestsAsync(
-        string userId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    /// <summary>Admin view — all requests with optional status filter.</summary>
-    Task<PaginatedList<MembershipUpgradeResponse>> GetAllRequestsAsync(
-        RequestFilters filters, CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
-    /// <summary>
-    /// User submits a new upgrade request.
-    /// Fails if a Pending request already exists (PendingUpgradeRequestExists).
-    /// </summary>
-    Task<Result<MembershipUpgradeResponse>> CreateRequestAsync(
-        string userId, CreateMembershipUpgradeRequest request,
-        CancellationToken ct = default);
-
-    /// <summary>Admin approves or rejects the request.</summary>
-    Task<Result<MembershipUpgradeResponse>> ReviewRequestAsync(
-        string requestId, string adminId, ReviewMembershipUpgradeRequest request,
-        CancellationToken ct = default);
-
-    /// <summary>User cancels their own pending request.</summary>
-    Task<Result> CancelRequestAsync(
-        string requestId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/IMessagingService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Messaging;
-
-namespace Sportiva.Services;
-
-public interface IMessagingService
-{
-    // ── Conversations ──────────────────────────────────────────────
-    /// <summary>Returns the inbox — one entry per unique conversation partner.</summary>
-    Task<PaginatedList<ConversationSummary>> GetConversationsAsync(
-        string userId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Messages ───────────────────────────────────────────────────
-    Task<PaginatedList<MessageResponse>> GetConversationAsync(
-        string userId, string otherUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<Result<MessageResponse>> SendMessageAsync(
-        string senderId, SendMessageRequest request,
-        CancellationToken ct = default);
-
-    /// <summary>Marks all unread messages in a conversation as read.</summary>
-    Task<Result> MarkConversationAsReadAsync(
-        string userId, string otherUserId,
-        CancellationToken ct = default);
-
-    Task<Result> DeleteMessageAsync(
-        string messageId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/INotificationService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Notifications;
-
-namespace Sportiva.Services;
-
-public interface INotificationService
-{
-    // ── Notification Queries ───────────────────────────────────────
-    Task<NotificationListResponse> GetNotificationsAsync(
-        string userId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<NotificationCountersResponse> GetCountersAsync(
-        string userId, CancellationToken ct = default);
-
-    // ── Notification Commands ──────────────────────────────────────
-    Task<Result> MarkAsReadAsync(
-        string notificationId, string userId,
-        CancellationToken ct = default);
-
-    Task<Result> MarkAllAsReadAsync(
-        string userId, CancellationToken ct = default);
-
-    Task<Result> DeleteNotificationAsync(
-        string notificationId, string userId,
-        CancellationToken ct = default);
-
-    // ── Preferences ────────────────────────────────────────────────
-    Task<NotificationPreferencesListResponse> GetPreferencesAsync(
-        string userId, CancellationToken ct = default);
-
-    Task<Result> UpdatePreferencesAsync(
-        string userId, BulkUpdateNotificationPreferencesRequest request,
-        CancellationToken ct = default);
-
-    // ── Internal (called by other services, not exposed via HTTP) ──
-    /// <summary>
-    /// Creates and dispatches a notification.
-    /// Respects per-user NotificationPreference (InApp / Email).
-    /// </summary>
-    //Task SendAsync(
-    //    string recipientId,
-    //    string? actorId,
-    //    NotificationType type,
-    //    string title,
-    //    string message,
-    //    string? entityType = null,
-    //    string? entityId   = null,
-    //    CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/IReviewService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Reviews;
-
-namespace Sportiva.Services;
-
-public interface IReviewService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<ReviewResponse>> GetReviewAsync(
-        string reviewId, string? currentUserId,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<ReviewResponse>> GetReviewsByCourtAsync(
-        string courtId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<ReviewResponse>> GetReviewsByClubAsync(
-        string clubId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<ReviewResponse>> GetMyReviewsAsync(
-        string userId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
-    /// <summary>
-    /// Creates a review tied to a completed booking.
-    /// Enforces one-review-per-booking and CanReview rules.
-    /// </summary>
-    Task<Result<ReviewResponse>> CreateReviewAsync(
-        string userId, CreateReviewRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> DeleteReviewAsync(
-        string reviewId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/ISubscriptionPlanService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Subscriptions;
-
-namespace Sportiva.Services;
-
-public interface ISubscriptionPlanService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<SubscriptionPlanResponse>> GetPlanAsync(
-        string planId, CancellationToken ct = default);
-
-    Task<PaginatedList<SubscriptionPlanResponse>> GetPlansAsync(
-        RequestFilters filters, CancellationToken ct = default);
-
-    // ── Admin CRUD ─────────────────────────────────────────────────
-    //Task<Result<SubscriptionPlanResponse>> CreatePlanAsync(
-    //    CreateSubscriptionPlanRequest request,
-    //    CancellationToken ct = default);
-
-    //Task<Result<SubscriptionPlanResponse>> UpdatePlanAsync(
-    //    string planId, UpdateSubscriptionPlanRequest request,
-    //CancellationToken ct = default);
-
-    Task<Result> DeletePlanAsync(
-        string planId, CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/ITimeSlotService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.TimeSlots;
-
-namespace Sportiva.Services;
-
-public interface ITimeSlotService
-{
-    // ── Queries ────────────────────────────────────────────────────
-    Task<Result<TimeSlotResponse>> GetTimeSlotAsync(
-        string timeSlotId, CancellationToken ct = default);
-
-    Task<PaginatedList<TimeSlotResponse>> GetTimeSlotsByCourtAsync(
-        string courtId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    /// <summary>
-    /// Returns only available (not booked) slots for a court,
-    /// optionally filtered by date. Used by booking flow.
-    /// </summary>
-    Task<PaginatedList<TimeSlotResponse>> GetAvailableTimeSlotsAsync(
-        string courtId, DateOnly? day, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Commands ───────────────────────────────────────────────────
-    Task<Result<TimeSlotResponse>> CreateTimeSlotAsync(
-        string currentUserId, CreateTimeSlotRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> DeleteTimeSlotAsync(
-        string timeSlotId, string currentUserId,
-        CancellationToken ct = default);
-}
-```
-
-## File: Services/Abstraction/ITournamentService.cs
-```csharp
-using Sportiva.Contracts.Common;
-using Sportiva.Contracts.Shared.Summaries;
-using Sportiva.Contracts.Tournaments;
-
-namespace Sportiva.Services;
-
-public interface ITournamentService
-{
-    // ── Tournament Queries ─────────────────────────────────────────
-    Task<Result<TournamentResponse>> GetTournamentAsync(
-        string tournamentId, string? currentUserId,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<TournamentResponse>> GetTournamentsAsync(
-        string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<PaginatedList<TournamentResponse>> GetTournamentsByOrganizerAsync(
-        string organizerId, string? currentUserId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    // ── Tournament Commands ────────────────────────────────────────
-    Task<Result<TournamentResponse>> CreateTournamentAsync(
-        string organizerId, CreateTournamentRequest request,
-        CancellationToken ct = default);
-
-    Task<Result> DeleteTournamentAsync(
-        string tournamentId, string currentUserId,
-        CancellationToken ct = default);
-
-    // ── Participant Management ─────────────────────────────────────
-    Task<PaginatedList<ParticipantSummary>> GetParticipantsAsync(
-        string tournamentId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<Result> JoinTournamentAsync(
-        string tournamentId, string userId,
-        CancellationToken ct = default);
-
-    Task<Result> LeaveTournamentAsync(
-        string tournamentId, string userId,
-        CancellationToken ct = default);
-
-    // ── Match Management ───────────────────────────────────────────
-    Task<PaginatedList<TournamentMatchResponse>> GetTournamentMatchesAsync(
-        string tournamentId, RequestFilters filters,
-        CancellationToken ct = default);
-
-    Task<Result<TournamentMatchResponse>> CreateTournamentMatchAsync(
-        string currentUserId, CreateTournamentMatchRequest request,
-        CancellationToken ct = default);
-
-    Task<Result<TournamentMatchResponse>> SetMatchWinnerAsync(
-        string matchId, string currentUserId, SetTournamentMatchWinnerRequest request,
-        CancellationToken ct = default);
-}
-```
-
-## File: Settings/MailSettings.cs
-```csharp
-namespace Sportiva.Settings;
-
-public class MailSettings
-{
-    [Required, EmailAddress]
-    public string Mail { get; set; } = string.Empty;
-
-    [Required]
-    public string DisplayName { get; set; } = string.Empty;
-
-    [Required]
-    public string Password { get; set; } = string.Empty;
-
-    [Required]
-    public string Host { get; set; } = string.Empty;
-
-    [Range(100, 999)]
-    public int Port { get; set; }
-}
-```
-
-## File: .gitignore
-```
-appsettings.json
-
-bin/
-obj/
-.vs/
-*.user
-wwwroot/uploads/
-```
-
-## File: Abstractions/PaginatedList.cs
-```csharp
-namespace Sportiva.Abstractions;
-
-public sealed class PaginatedList<T>
-{
-    public List<T> Items { get; init; }
-    public int PageNumber { get; init; }
-    public int PageSize { get; init; }
-    public int TotalCount { get; init; }
-    public int TotalPages { get; init; }
-    public bool HasPreviousPage => PageNumber > 1;
-    public bool HasNextPage => PageNumber < TotalPages;
-
-    private PaginatedList(List<T> items, int pageNumber, int pageSize, int totalCount)
-    {
-        Items = items;
-        PageNumber = pageNumber;
-        PageSize = pageSize;
-        TotalCount = totalCount;
-        TotalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
-    }
-
-    public static async Task<PaginatedList<T>> CreateAsync(IQueryable<T> source, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
-    {
-
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentOutOfRangeException.ThrowIfLessThan(pageNumber, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
-
-        var totalCount = await source.CountAsync(cancellationToken);
-        var items = await source
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
-
-        return new PaginatedList<T>(items, pageNumber, pageSize, totalCount);
-
-    }
-}
-```
-
-## File: appsettings.json
-```json
-
-```
-
-## File: Authentication/IJwtProvider.cs
-```csharp
-namespace Sportiva.Authentication;
-
-public interface IJwtProvider
-{
-    (string token, int expiresIn) GenerateToken(ApplicationUser user, IEnumerable<string> roles, IEnumerable<string> permissions);
-    string? ValidateToken(string token, bool validateLifetime = true);
-}
-```
-
-## File: Authentication/JwtProvider.cs
-```csharp
-namespace Sportiva.Authentication;
-
-public class JwtProvider(IOptions<JwtOptions> options) : IJwtProvider
-{
-    private readonly JwtOptions _options = options.Value;
-
-    public (string token, int expiresIn) GenerateToken(ApplicationUser user, IEnumerable<string> roles, IEnumerable<string> permissions)
-    {
-        Claim[] claims = [
-            new(JwtRegisteredClaimNames.Sub, user.Id),
-            new(JwtRegisteredClaimNames.Email, user.Email!),
-            new(JwtRegisteredClaimNames.GivenName, user.FirstName),
-            new(JwtRegisteredClaimNames.FamilyName, user.LastName),
-            new(JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString()),
-            new(nameof(roles), JsonSerializer.Serialize(roles), JsonClaimValueTypes.JsonArray),
-            new(nameof(permissions), JsonSerializer.Serialize(permissions), JsonClaimValueTypes.JsonArray)
-        ];
-
-        var symmetricSecurityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
-
-        var singingCredentials = new SigningCredentials(symmetricSecurityKey, SecurityAlgorithms.HmacSha256);
-
-        var token = new JwtSecurityToken(
-            issuer: _options.Issuer,
-            audience: _options.Audience,
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(_options.ExpiryMinutes),
-            signingCredentials: singingCredentials
-        );
-
-        return (token: new JwtSecurityTokenHandler().WriteToken(token), expiresIn: _options.ExpiryMinutes * 60);
-    }
-
-    public string? ValidateToken(string token, bool validateLifetime = true)
-    {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var symmetricSecurityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
-
-        try
-        {
-            tokenHandler.ValidateToken(token, new TokenValidationParameters
-            {
-                IssuerSigningKey = symmetricSecurityKey,
-                ValidateIssuerSigningKey = true,
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                ValidateLifetime = validateLifetime, // ← السطر ده بس
-                ClockSkew = TimeSpan.Zero
-            }, out SecurityToken validatedToken);
-
-            var jwtToken = (JwtSecurityToken)validatedToken;
-            return jwtToken.Claims.First(x => x.Type == JwtRegisteredClaimNames.Sub).Value;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-}
-```
-
-## File: CancellationExceptionFilter.cs
-```csharp
-using Microsoft.AspNetCore.Mvc.Filters;
-
-// CancellationExceptionFilter.cs
-public class CancellationExceptionFilter : IAsyncExceptionFilter
-{
-    public Task OnExceptionAsync(ExceptionContext context)
-    {
-        if (context.Exception is OperationCanceledException)
-        {
-            context.Result = new StatusCodeResult(499);
-            context.ExceptionHandled = true;
-        }
-        return Task.CompletedTask;
-    }
-}
-```
-
-## File: Contracts/Authentication/AuthResponse.cs
-```csharp
-namespace Sportiva.Contracts.Authentication;
-
-public record AuthResponse(
-    string Id,
-    string? Email,
-    string FirstName,
-    string LastName,
-    string Token,
-    int ExpiresIn,
-    string RefreshToken,
-    DateTime RefreshTokenExpiration
-);
-```
-
-## File: Contracts/Authentication/LoginRequest.cs
-```csharp
-namespace Sportiva.Contracts.Authentication;
-
-public record LoginRequest(
-    string Email,
-    string Password
-);
-```
-
 ## File: Contracts/Bookings/BookingResponse.cs
 ```csharp
 using Sportiva.Contracts.Shared.Enums;
@@ -3040,7 +958,7 @@ namespace Sportiva.Contracts.Clubs;
 
 public record CreateClubRequest(
     string? Name,
-    string? LogoUrl,
+    IFormFile? Logo,
     string? Governorate,
     string? City,
     string? Address,
@@ -3055,13 +973,13 @@ namespace Sportiva.Contracts.Clubs;
 
 public record UpdateClubRequest(
     string? Name,
-    string? LogoUrl,
+    IFormFile? Logo,
     string? Governorate,
     string? City,
     string? Address,
     string? PhoneNumber,
     string? Email,
-    bool    IsActive
+    bool IsActive
 );
 ```
 
@@ -3129,13 +1047,13 @@ using Sportiva.Contracts.Shared.Enums;
 namespace Sportiva.Contracts.Courts;
 
 public record CreateCourtRequest(
-    string       ClubId,
-    string?      Name,
-    string?      Description,
-    string?      ImageUrl,
+    string ClubId,
+    string? Name,
+    string? Description,
+    IFormFile? Image,
     SportTypeDto SportType,
-    int          MaxCapacity,
-    decimal      PricePerHour
+    int MaxCapacity,
+    decimal PricePerHour
 );
 ```
 
@@ -3146,24 +1064,13 @@ using Sportiva.Contracts.Shared.Enums;
 namespace Sportiva.Contracts.Courts;
 
 public record UpdateCourtRequest(
-    string?      Name,
-    string?      Description,
-    string?      ImageUrl,
+    string? Name,
+    string? Description,
+    IFormFile? Image,
     SportTypeDto SportType,
-    int          MaxCapacity,
-    decimal      PricePerHour,
-    bool         IsActive
-);
-```
-
-## File: Contracts/Followers/UserFollowResponse.cs
-```csharp
-using Sportiva.Contracts.Shared.Summaries;
-
-namespace Sportiva.Contracts.Followers;
-
-public record UserFollowResponse(
-    UserCardSummary User
+    int MaxCapacity,
+    decimal PricePerHour,
+    bool IsActive
 );
 ```
 
@@ -4658,260 +2565,19 @@ public class ProfilesController(IProfileService profileService) : ControllerBase
 }
 ```
 
-## File: DependencyInjection.cs
+## File: Entities/ApplicationRole.cs
 ```csharp
-using Hangfire;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Sportiva.Services;
+namespace Sportiva.Entities;
 
-namespace Sportiva;
-
-public static class DependencyInjection
+public class ApplicationRole : IdentityRole
 {
-    public static IServiceCollection AddDependencies(this IServiceCollection services,
-        IConfiguration configuration)
+    public ApplicationRole()
     {
-        services.AddControllers(options =>
-        {
-            options.Filters.Add<CancellationExceptionFilter>();
-        })
-        .AddJsonOptions(options =>
-        {
-            options.JsonSerializerOptions.Converters.Add(
-                new JsonStringEnumConverter()
-            );
-        });
-
-        services.AddOpenApi();
-
-        services.AddCors(options =>
-            options.AddDefaultPolicy(builder =>
-                builder
-                    .AllowAnyHeader()
-                    .AllowAnyMethod()
-                    .WithOrigins(
-                    "http://localhost:5173",
-                    "https://front-end-project-bay-seven.vercel.app"
-                        )
-                .AllowCredentials()
-            )
-        );
-
-        services.AddAuthConfig(configuration);
-
-        var connectionString = configuration.GetConnectionString("DefaultConnection") ??
-            throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-
-        services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(connectionString));
-
-        services
-            .AddMapsterConfig()
-            .AddFluentValidationConfig();
-        services.AddSignalR();
-        services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IEmailSender, EmailService>();
-        services.AddScoped<IProfileService, ProfileService>();
-        services.AddScoped<IPostService, PostService>();
-        services.AddScoped<ICommentService, CommentService>();
-        services.AddHttpClient();
-        services.AddHttpContextAccessor();
-        services.AddBackgroundJobsConfig(configuration);
-
-        services.AddOptions<MailSettings>()
-            .BindConfiguration(nameof(MailSettings))
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-
-        return services;
+        Id = Guid.CreateVersion7().ToString();
     }
 
-    // ==================== Mapster ====================
-    private static IServiceCollection AddMapsterConfig(this IServiceCollection services)
-    {
-        var mappingConfig = TypeAdapterConfig.GlobalSettings;
-        mappingConfig.Scan(Assembly.GetExecutingAssembly());
-
-        services.AddSingleton<IMapper>(new Mapper(mappingConfig));
-        return services;
-    }
-
-    // ==================== FluentValidation ====================
-    private static IServiceCollection AddFluentValidationConfig(this IServiceCollection services)
-    {
-        services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
-        return services;
-    }
-
-    // ==================== AUTH CONFIG ====================
-    private static IServiceCollection AddAuthConfig(this IServiceCollection services,
- IConfiguration configuration)
-    {
-        services.AddIdentity<ApplicationUser, ApplicationRole>()
-            .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddDefaultTokenProviders();
-
-        services.AddTransient<IAuthorizationHandler, PermissionAuthorizationHandler>();
-        services.AddTransient<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
-        services.AddSingleton<IJwtProvider, JwtProvider>();
-
-        services.AddOptions<JwtOptions>()
-            .BindConfiguration(JwtOptions.SectionName)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-
-        var jwtSettings = configuration
-            .GetSection(JwtOptions.SectionName)
-            .Get<JwtOptions>();
-
-        // ── Read OAuth config ───────────────────────────────────────────────
-        var googleConfig = configuration
-            .GetSection(GoogleOAuthOptions.SectionName)
-            .Get<GoogleOAuthOptions>();
-
-        var githubConfig = configuration
-            .GetSection(GitHubOAuthOptions.SectionName)
-            .Get<GitHubOAuthOptions>();
-
-        // ── Bind options so they can be injected anywhere via IOptions<T> ──
-        services.Configure<GoogleOAuthOptions>(
-            configuration.GetSection(GoogleOAuthOptions.SectionName));
-
-        services.Configure<GitHubOAuthOptions>(
-            configuration.GetSection(GitHubOAuthOptions.SectionName));
-
-        // ── Authentication pipeline ─────────────────────────────────────────
-        var authBuilder = services.AddAuthentication(options =>
-        {
-            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        })
-        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme)
-        .AddJwtBearer(options =>
-        {
-            options.SaveToken = true;
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(jwtSettings!.Key)),
-                ValidIssuer = jwtSettings.Issuer,
-                ValidAudience = jwtSettings.Audience
-            };
-
-            // ── SignalR JWT from Query String ───────────────────────────────
-            options.Events = new JwtBearerEvents
-            {
-                OnMessageReceived = context =>
-                {
-                    var accessToken = context.Request.Query["access_token"];
-                    var path = context.HttpContext.Request.Path;
-
-                    if (!string.IsNullOrEmpty(accessToken) &&
-                        path.StartsWithSegments("/hubs"))
-                    {
-                        context.Token = accessToken;
-                    }
-
-                    return Task.CompletedTask;
-                }
-            };
-        });
-
-        // ── Google OAuth (only if configured) ──────────────────────────────
-        if (!string.IsNullOrWhiteSpace(googleConfig?.ClientId) &&
-            !string.IsNullOrWhiteSpace(googleConfig?.ClientSecret))
-        {
-            authBuilder.AddGoogle(options =>
-            {
-                options.ClientId = googleConfig.ClientId;
-                options.ClientSecret = googleConfig.ClientSecret;
-                options.SaveTokens = true;
-
-                if (!string.IsNullOrWhiteSpace(googleConfig.RedirectUri))
-                    options.CallbackPath = googleConfig.RedirectUri;
-
-                foreach (var scope in googleConfig.Scopes ?? ["email", "profile"])
-                    options.Scope.Add(scope);
-            });
-        }
-
-        // ── GitHub OAuth (only if configured) ──────────────────────────────
-        if (!string.IsNullOrWhiteSpace(githubConfig?.ClientId) &&
-            !string.IsNullOrWhiteSpace(githubConfig?.ClientSecret))
-        {
-            authBuilder.AddGitHub(options =>
-            {
-                options.ClientId = githubConfig.ClientId;
-                options.ClientSecret = githubConfig.ClientSecret;
-                options.CallbackPath = "/signin-github";
-                options.SaveTokens = true;
-
-                foreach (var scope in githubConfig.Scopes ?? ["user:email"])
-                    options.Scope.Add(scope);
-            });
-        }
-
-        // ── Prevent cookie redirects on API endpoints → return 401/403 ─────
-        services.ConfigureApplicationCookie(options =>
-        {
-            options.Events = new Microsoft.AspNetCore.Authentication.Cookies
-                .CookieAuthenticationEvents
-            {
-                OnRedirectToLogin = ctx =>
-                {
-                    if (ctx.Request.Path.StartsWithSegments("/api") ||
-                        ctx.Request.Headers["Accept"].ToString()
-                           .Contains("application/json"))
-                    {
-                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        return Task.CompletedTask;
-                    }
-                    ctx.Response.Redirect(ctx.RedirectUri);
-                    return Task.CompletedTask;
-                },
-                OnRedirectToAccessDenied = ctx =>
-                {
-                    if (ctx.Request.Path.StartsWithSegments("/api") ||
-                        ctx.Request.Headers["Accept"].ToString()
-                           .Contains("application/json"))
-                    {
-                        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        return Task.CompletedTask;
-                    }
-                    ctx.Response.Redirect(ctx.RedirectUri);
-                    return Task.CompletedTask;
-                }
-            };
-        });
-
-        services.Configure<IdentityOptions>(options =>
-        {
-            options.Password.RequiredLength = 8;
-            options.SignIn.RequireConfirmedEmail = true;
-            options.User.RequireUniqueEmail = true;
-        });
-
-        return services;
-    }
-    // ==================== Hangfire ====================
-    private static IServiceCollection AddBackgroundJobsConfig(
-        this IServiceCollection services, IConfiguration configuration)
-    {
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UseSqlServerStorage(
-                configuration.GetConnectionString("HangfireConnection")));
-
-        services.AddHangfireServer();
-
-        return services;
-    }
+    public bool IsDefault { get; set; }
+    public bool IsDeleted { get; set; }
 }
 ```
 
@@ -5085,6 +2751,47 @@ public class Court
     public string? ImageUrl { get; set; }
 
     public ICollection<TimeSlot> TimeSlots { get; set; } = [];     // ✅ تم تهيئة الـ collection
+}
+```
+
+## File: Entities/FriendlyMatch.cs
+```csharp
+namespace Sportiva.Entities;
+
+public class FriendlyMatch
+{
+    public string Id { get; set; } = Guid.CreateVersion7().ToString();
+    public string OrganizerId { get; set; } = string.Empty;
+    public ApplicationUser Organizer { get; set; } = default!;
+    public string CourtId { get; set; } = string.Empty;
+    public Court Court { get; set; } = default!;
+
+    public DateOnly Date { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public SportType SportType { get; set; } = SportType.Football;
+    public int RequiredPlayers { get; set; }
+    public MatchStatus Status { get; set; } = MatchStatus.Open;
+    public string? Note { get; set; }
+    public bool IsDeleted { get; set; } = false;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public ICollection<MatchJoinRequest> JoinRequests { get; set; } = [];
+}
+```
+
+## File: Entities/MatchJoinRequest.cs
+```csharp
+namespace Sportiva.Entities;
+
+public class MatchJoinRequest
+{
+    public string Id { get; set; } = Guid.CreateVersion7().ToString();
+    public string FriendlyMatchId { get; set; } = string.Empty;
+    public FriendlyMatch FriendlyMatch { get; set; } = default!;
+    public string PlayerId { get; set; } = string.Empty;
+    public ApplicationUser Player { get; set; } = default!;
+    public JoinRequestStatus Status { get; set; } = JoinRequestStatus.Pending;
+    public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
 }
 ```
 
@@ -5305,6 +3012,26 @@ public class ReplyReaction
 }
 ```
 
+## File: Entities/Review.cs
+```csharp
+namespace Sportiva.Entities;
+
+public class Review
+{
+    public string Id { get; set; } = Guid.CreateVersion7().ToString();
+    public string CourtId { get; set; } = string.Empty;
+    public Court Court { get; set; } = default!;
+    public string UserId { get; set; } = string.Empty;
+    public ApplicationUser User { get; set; } = default!;
+    public string BookingId { get; set; } = string.Empty;
+    public Booking Booking { get; set; } = default!;
+    public int Rating { get; set; }               // من 1 لـ 5
+    public string? Comment { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; set; } = false;
+}
+```
+
 ## File: Entities/SubscriptionPayment.cs
 ```csharp
 namespace Sportiva.Entities;
@@ -5457,6 +3184,122 @@ public class UserProfile
     public SportType? PreferredSport { get; set; }
     public string? PreferredCity { get; set; }
     public bool IsDeleted { get; set; } = false;
+}
+```
+
+## File: Enums/BookingStatus.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum BookingStatus
+{
+    Pending,
+    Confirmed,
+    Cancelled,
+    Completed
+}
+```
+
+## File: Enums/JoinRequestStatus.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum JoinRequestStatus
+{
+    Pending,
+    Accepted,
+    Rejected
+}
+```
+
+## File: Enums/MatchStatus.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum MatchStatus
+{
+    Open,
+    Full,
+    InProgress,
+    Completed,
+    Cancelled
+}
+```
+
+## File: Enums/NotificationPriority.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum NotificationPriority
+{
+    Low,
+    Normal,
+    High
+}
+```
+
+## File: Enums/NotificationType.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum NotificationType
+{
+    NewFollower,
+    PostLiked,
+    PostCommented,
+    CommentReplied,
+    CommentReacted,
+    BookingConfirmed,
+    BookingCancelled,
+    BookingReminder,
+    MatchJoinRequestReceived,
+    MatchJoinRequestAccepted,
+    MatchJoinRequestRejected,
+    MatchFull,
+    NewMessage,
+    SecurityAlert,
+    GeneralInfo
+}
+```
+
+## File: Enums/PaymentStatus.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum PaymentStatus
+{
+    Pending,
+    Paid,
+    Failed,
+    Refunded
+}
+```
+
+## File: Enums/RequestStatus.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum RequestStatus
+{
+    Pending,
+    Approved,
+    Rejected
+}
+```
+
+## File: Enums/SportType.cs
+```csharp
+namespace Sportiva.Enums;
+
+public enum SportType
+{
+    Football,
+    Basketball,
+
+    Tennis,
+    Padel,
+    Volleyball,
+    Other
 }
 ```
 
@@ -5774,6 +3617,1106 @@ global using System.Text.Json.Serialization;
 //    .ToList();
 ```
 
+## File: Helpers/EmailBodyBuilder.cs
+```csharp
+namespace Sportiva.Helpers
+{
+    public static class EmailBodyBuilder
+    {
+        private const string VerificationTemplate = @"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
+    <meta name=""x-apple-disable-message-reformatting"" />
+    <meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"" />
+    <meta name=""color-scheme"" content=""light dark"" />
+    <meta name=""supported-color-schemes"" content=""light dark"" />
+    <title></title>
+    <style type=""text/css"" rel=""stylesheet"" media=""all"">
+        /* Base ------------------------------ */
+
+        @import url(""https://fonts.googleapis.com/css?family=Nunito+Sans:400,700&display=swap"");
+        body {
+          width: 100% !important;
+          height: 100%;
+          margin: 0;
+          -webkit-text-size-adjust: none;
+        }
+
+        a {
+          color: #3869d4;
+        }
+
+        a img {
+          border: none;
+        }
+
+        td {
+          word-break: break-word;
+        }
+
+        .preheader {
+          display: none !important;
+          visibility: hidden;
+          mso-hide: all;
+          font-size: 1px;
+          line-height: 1px;
+          max-height: 0;
+          max-width: 0;
+          opacity: 0;
+          overflow: hidden;
+        }
+        /* Type ------------------------------ */
+
+        body,
+        td,
+        th {
+          font-family: ""Nunito Sans"", Helvetica, Arial, sans-serif;
+        }
+
+        h1 {
+          margin-top: 0;
+          color: #333333;
+          font-size: 22px;
+          font-weight: bold;
+          text-align: left;
+        }
+
+        h2 {
+          margin-top: 0;
+          color: #333333;
+          font-size: 16px;
+          font-weight: bold;
+          text-align: left;
+        }
+
+        h3 {
+          margin-top: 0;
+          color: #333333;
+          font-size: 14px;
+          font-weight: bold;
+          text-align: left;
+        }
+
+        td,
+        th {
+          font-size: 16px;
+        }
+
+        p,
+        ul,
+        ol,
+        blockquote {
+          margin: 0.4em 0 1.1875em;
+          font-size: 16px;
+          line-height: 1.625;
+        }
+
+        p.sub {
+          font-size: 13px;
+        }
+        /* Utilities ------------------------------ */
+
+        .align-right {
+          text-align: right;
+        }
+
+        .align-left {
+          text-align: left;
+        }
+
+        .align-center {
+          text-align: center;
+        }
+
+        .u-margin-bottom-none {
+          margin-bottom: 0;
+        }
+        /* Buttons ------------------------------ */
+
+        .button {
+          background-color: #3869d4;
+          border-top: 10px solid #3869d4;
+          border-right: 18px solid #3869d4;
+          border-bottom: 10px solid #3869d4;
+          border-left: 18px solid #3869d4;
+          display: inline-block;
+          color: #fff;
+          text-decoration: none;
+          border-radius: 3px;
+          box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
+          -webkit-text-size-adjust: none;
+          box-sizing: border-box;
+        }
+
+        .button--green {
+          background-color: #22bc66;
+          border-top: 10px solid #22bc66;
+          border-right: 18px solid #22bc66;
+          border-bottom: 10px solid #22bc66;
+          border-left: 18px solid #22bc66;
+        }
+
+        .button--red {
+          background-color: #ff6136;
+          border-top: 10px solid #ff6136;
+          border-right: 18px solid #ff6136;
+          border-bottom: 10px solid #ff6136;
+          border-left: 18px solid #ff6136;
+        }
+
+        @media only screen and (max-width: 500px) {
+          .button {
+            width: 100% !important;
+            text-align: center !important;
+          }
+        }
+        /* Attribute list ------------------------------ */
+
+        .attributes {
+          margin: 0 0 21px;
+        }
+
+        .attributes_content {
+          background-color: #f4f4f7;
+          padding: 16px;
+        }
+
+        .attributes_item {
+          padding: 0;
+        }
+        /* Related Items ------------------------------ */
+
+        .related {
+          width: 100%;
+          margin: 0;
+          padding: 25px 0 0 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+        }
+
+        .related_item {
+          padding: 10px 0;
+          color: #cbcccf;
+          font-size: 15px;
+          line-height: 18px;
+        }
+
+        .related_item-title {
+          display: block;
+          margin: 0.5em 0 0;
+        }
+
+        .related_item-thumb {
+          display: block;
+          padding-bottom: 10px;
+        }
+
+        .related_heading {
+          border-top: 1px solid #cbcccf;
+          text-align: center;
+          padding: 25px 0 10px;
+        }
+        /* Discount Code ------------------------------ */
+
+        .discount {
+          width: 100%;
+          margin: 0;
+          padding: 24px;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+          background-color: #f4f4f7;
+          border: 2px dashed #cbcccf;
+        }
+
+        .discount_heading {
+          text-align: center;
+        }
+
+        .discount_body {
+          text-align: center;
+          font-size: 15px;
+        }
+        /* Social Icons ------------------------------ */
+
+        .social {
+          width: auto;
+        }
+
+        .social td {
+          padding: 0;
+          width: auto;
+        }
+
+        .social_icon {
+          height: 20px;
+          margin: 0 8px 10px 8px;
+          padding: 0;
+        }
+        /* Data table ------------------------------ */
+
+        .purchase {
+          width: 100%;
+          margin: 0;
+          padding: 35px 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+        }
+
+        .purchase_content {
+          width: 100%;
+          margin: 0;
+          padding: 25px 0 0 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+        }
+
+        .purchase_item {
+          padding: 10px 0;
+          color: #51545e;
+          font-size: 15px;
+          line-height: 18px;
+        }
+
+        .purchase_heading {
+          padding-bottom: 8px;
+          border-bottom: 1px solid #eaeaec;
+        }
+
+        .purchase_heading p {
+          margin: 0;
+          color: #85878e;
+          font-size: 12px;
+        }
+
+        .purchase_footer {
+          padding-top: 15px;
+          border-top: 1px solid #eaeaec;
+        }
+
+        .purchase_total {
+          margin: 0;
+          text-align: right;
+          font-weight: bold;
+          color: #333333;
+        }
+
+        .purchase_total--label {
+          padding: 0 15px 0 0;
+        }
+
+        body {
+          background-color: #f2f4f6;
+          color: #51545e;
+        }
+
+        p {
+          color: #51545e;
+        }
+
+        .email-wrapper {
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+          background-color: #f2f4f6;
+        }
+
+        .email-content {
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+        }
+        /* Masthead ----------------------- */
+
+        .email-masthead {
+          padding: 25px 0;
+          text-align: center;
+        }
+
+        .email-masthead_logo {
+          width: 94px;
+        }
+
+        .email-masthead_name {
+          font-size: 16px;
+          font-weight: bold;
+          color: #a8aaaf;
+          text-decoration: none;
+          text-shadow: 0 1px 0 white;
+        }
+        /* Body ------------------------------ */
+
+        .email-body {
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+        }
+
+        .email-body_inner {
+          width: 570px;
+          margin: 0 auto;
+          padding: 0;
+          -premailer-width: 570px;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+          background-color: #ffffff;
+        }
+
+        .email-footer {
+          width: 570px;
+          margin: 0 auto;
+          padding: 0;
+          -premailer-width: 570px;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+          text-align: center;
+        }
+
+        .email-footer p {
+          color: #a8aaaf;
+        }
+
+        .body-action {
+          width: 100%;
+          margin: 30px auto;
+          padding: 0;
+          -premailer-width: 100%;
+          -premailer-cellpadding: 0;
+          -premailer-cellspacing: 0;
+          text-align: center;
+        }
+
+        .body-sub {
+          margin-top: 25px;
+          padding-top: 25px;
+          border-top: 1px solid #eaeaec;
+        }
+
+        .content-cell {
+          padding: 45px;
+        }
+        /*Media Queries ------------------------------ */
+
+        @media only screen and (max-width: 600px) {
+          .email-body_inner,
+          .email-footer {
+            width: 100% !important;
+          }
+        }
+
+        @media (prefers-color-scheme: dark) {
+          body,
+          .email-body,
+          .email-body_inner,
+          .email-content,
+          .email-wrapper,
+          .email-masthead,
+          .email-footer {
+            background-color: #333333 !important;
+            color: #fff !important;
+          }
+          p,
+          ul,
+          ol,
+          blockquote,
+          h1,
+          h2,
+          h3,
+          span,
+          .purchase_item {
+            color: #fff !important;
+          }
+          .attributes_content,
+          .discount {
+            background-color: #222 !important;
+          }
+          .email-masthead_name {
+            text-shadow: none !important;
+          }
+        }
+
+        :root {
+          color-scheme: light dark;
+          supported-color-schemes: light dark;
+        }
+    </style>
+    <!--[if mso]>
+      <style type=""text/css"">
+        .f-fallback {
+          font-family: Arial, sans-serif;
+        }
+      </style>
+    <![endif]-->
+</head>
+<body>
+    <span class=""preheader"">
+        Use this link to reset your password. The link is only valid for 24
+        hours.
+    </span>
+    <table class=""email-wrapper""
+           width=""100%""
+           cellpadding=""0""
+           cellspacing=""0""
+           role=""presentation"">
+        <tr>
+            <td align=""center"">
+                <table class=""email-content""
+                       width=""100%""
+                       cellpadding=""0""
+                       cellspacing=""0""
+                       role=""presentation"">
+                    <tr>
+                        <td class=""email-masthead"">
+                            <a href=""https://example.com""
+                               class=""f-fallback email-masthead_name"">
+                                Career Path
+                            </a>
+                        </td>
+                    </tr>
+                    <!-- Email Body -->
+                    <tr>
+                        <td class=""email-body""
+                            width=""570""
+                            cellpadding=""0""
+                            cellspacing=""0"">
+                            <table class=""email-body_inner""
+                                   align=""center""
+                                   width=""570""
+                                   cellpadding=""0""
+                                   cellspacing=""0""
+                                   role=""presentation"">
+                                <!-- Body content -->
+                                <tr>
+                                    <td class=""content-cell"">
+                                        <div class=""f-fallback"">
+                                            <h1>Hi {{name}},</h1>
+                                            <p>
+                                                To confirm your email, please click the button below:
+                                            </p>
+                                            <!-- Action -->
+                                            <table class=""body-action""
+                                                   align=""center""
+                                                   width=""100%""
+                                                   cellpadding=""0""
+                                                   cellspacing=""0""
+                                                   role=""presentation"">
+                                                <tr>
+                                                    <td align=""center"">
+                                                        <!-- Border based button
+                                                        https://litmus.com/blog/a-guide-to-bulletproof-buttons-in-email-design -->
+                                                        <table width=""100%""
+                                                               border=""0""
+                                                               cellspacing=""0""
+                                                               cellpadding=""0""
+                                                               role=""presentation"">
+                                                            <tr>
+                                                                <td align=""center"">
+                                                                    <a href=""{{action_url}}""
+                                                                       class=""f-fallback button button--green""
+                                                                       target=""_blank"">Verify email address</a>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                            <p>Thanks, <br />Career Path team</p>
+                                            <!-- Sub copy -->
+                                            <table class=""body-sub"" role=""presentation"">
+                                                <tr>
+                                                    <td>
+                                                        <p class=""f-fallback sub"">
+                                                            If you’re having trouble with the button above,
+                                                            copy and paste the URL below into your web
+                                                            browser.
+                                                        </p>
+                                                        <p class=""f-fallback sub"">{{action_url}}</p>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <table class=""email-footer""
+                                   align=""center""
+                                   width=""570""
+                                   cellpadding=""0""
+                                   cellspacing=""0""
+                                   role=""presentation"">
+                                <tr>
+                                    <td class=""content-cell"" align=""center"">
+                                        <p class=""f-fallback sub align-center"">
+                                            Career Path
+                                            <br />1234 Street Rd. <br />Cairo, Egypt
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+        public static string GenerateEmailBody(Dictionary<string, string> emailBody)
+        {
+            string temp = VerificationTemplate;
+
+            foreach (var item in emailBody)
+            {
+                temp = temp.Replace(item.Key, item.Value);
+            }
+
+            return temp;
+        }
+    }
+}
+```
+
+## File: Helpers/FileHelper.cs
+```csharp
+namespace Sportiva.Helpers
+{
+    public class FileHelper
+    {
+        public async static Task<string> UploadeFileAsync(IFormFile file, string location, IWebHostEnvironment env, IHttpContextAccessor accessor)
+        {
+            if (file is null)
+                return null;
+            var path = Path.Combine(env.WebRootPath, location);
+
+            if (!Directory.Exists(path))
+                Directory.CreateDirectory(path);
+
+            var extention = Path.GetExtension(file.FileName);
+            var fileName = Guid.NewGuid().ToString().Replace("-", string.Empty);
+
+            var fullPath = Path.Combine(path, fileName + extention);
+
+            using (FileStream stream = new FileStream(fullPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+
+            }
+            var origin = accessor.HttpContext?.Request;
+
+            return $"{origin.Scheme}://{origin.Host}/{location}/{fileName}{extention}";
+        }
+
+        //DeleteFile عمليه سريعه جدا علي الكورس
+        public static void DeleteFile(string oldPath, string location, IWebHostEnvironment env)
+        {
+            if (string.IsNullOrEmpty(oldPath))
+                return;
+
+            var fileName = Path.GetFileName(new Uri(oldPath).LocalPath);
+            var path = Path.Combine(env.WebRootPath, location, fileName);
+
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+}
+```
+
+## File: Helpers/ForgetPasswordBodyBuilder.cs
+```csharp
+namespace Sportiva.Helpers
+{
+    public static class ForgetPasswordBodyBuilder
+    {
+        private const string ForgotPasswordTemplate = @"
+<!DOCTYPE html>
+<html lang=""en"">
+  <head>
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
+    <meta name=""x-apple-disable-message-reformatting"" />
+    <meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"" />
+    <meta name=""color-scheme"" content=""light dark"" />
+    <meta name=""supported-color-schemes"" content=""light dark"" />
+    <title></title>
+    <style type=""text/css"" rel=""stylesheet"" media=""all"">
+      /* Base ------------------------------ */
+
+      @import url(""https://fonts.googleapis.com/css?family=Nunito+Sans:400,700&display=swap"");
+      body {
+        width: 100% !important;
+        height: 100%;
+        margin: 0;
+        -webkit-text-size-adjust: none;
+      }
+
+      a {
+        color: #3869d4;
+      }
+
+      a img {
+        border: none;
+      }
+
+      td {
+        word-break: break-word;
+      }
+
+      .preheader {
+        display: none !important;
+        visibility: hidden;
+        mso-hide: all;
+        font-size: 1px;
+        line-height: 1px;
+        max-height: 0;
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+      }
+      /* Type ------------------------------ */
+
+      body,
+      td,
+      th {
+        font-family: ""Nunito Sans"", Helvetica, Arial, sans-serif;
+      }
+
+      h1 {
+        margin-top: 0;
+        color: #333333;
+        font-size: 22px;
+        font-weight: bold;
+        text-align: left;
+      }
+
+      h2 {
+        margin-top: 0;
+        color: #333333;
+        font-size: 16px;
+        font-weight: bold;
+        text-align: left;
+      }
+
+      h3 {
+        margin-top: 0;
+        color: #333333;
+        font-size: 14px;
+        font-weight: bold;
+        text-align: left;
+      }
+
+      td,
+      th {
+        font-size: 16px;
+      }
+
+      p,
+      ul,
+      ol,
+      blockquote {
+        margin: 0.4em 0 1.1875em;
+        font-size: 16px;
+        line-height: 1.625;
+      }
+
+      p.sub {
+        font-size: 13px;
+      }
+      /* Utilities ------------------------------ */
+
+      .align-right {
+        text-align: right;
+      }
+
+      .align-left {
+        text-align: left;
+      }
+
+      .align-center {
+        text-align: center;
+      }
+
+      .u-margin-bottom-none {
+        margin-bottom: 0;
+      }
+      /* Buttons ------------------------------ */
+
+      .button {
+        background-color: #3869d4;
+        border-top: 10px solid #3869d4;
+        border-right: 18px solid #3869d4;
+        border-bottom: 10px solid #3869d4;
+        border-left: 18px solid #3869d4;
+        display: inline-block;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 3px;
+        box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
+        -webkit-text-size-adjust: none;
+        box-sizing: border-box;
+      }
+
+      .button--green {
+        background-color: #22bc66;
+        border-top: 10px solid #22bc66;
+        border-right: 18px solid #22bc66;
+        border-bottom: 10px solid #22bc66;
+        border-left: 18px solid #22bc66;
+      }
+
+      .button--red {
+        background-color: #ff6136;
+        border-top: 10px solid #ff6136;
+        border-right: 18px solid #ff6136;
+        border-bottom: 10px solid #ff6136;
+        border-left: 18px solid #ff6136;
+      }
+
+      @media only screen and (max-width: 500px) {
+        .button {
+          width: 100% !important;
+          text-align: center !important;
+        }
+      }
+      /* Attribute list ------------------------------ */
+
+      .attributes {
+        margin: 0 0 21px;
+      }
+
+      .attributes_content {
+        background-color: #f4f4f7;
+        padding: 16px;
+      }
+
+      .attributes_item {
+        padding: 0;
+      }
+      /* Related Items ------------------------------ */
+
+      .related {
+        width: 100%;
+        margin: 0;
+        padding: 25px 0 0 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+      }
+
+      .related_item {
+        padding: 10px 0;
+        color: #cbcccf;
+        font-size: 15px;
+        line-height: 18px;
+      }
+
+      .related_item-title {
+        display: block;
+        margin: 0.5em 0 0;
+      }
+
+      .related_item-thumb {
+        display: block;
+        padding-bottom: 10px;
+      }
+
+      .related_heading {
+        border-top: 1px solid #cbcccf;
+        text-align: center;
+        padding: 25px 0 10px;
+      }
+      /* Discount Code ------------------------------ */
+
+      .discount {
+        width: 100%;
+        margin: 0;
+        padding: 24px;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+        background-color: #f4f4f7;
+        border: 2px dashed #cbcccf;
+      }
+
+      .discount_heading {
+        text-align: center;
+      }
+
+      .discount_body {
+        text-align: center;
+        font-size: 15px;
+      }
+      /* Social Icons ------------------------------ */
+
+      .social {
+        width: auto;
+      }
+
+      .social td {
+        padding: 0;
+        width: auto;
+      }
+
+      .social_icon {
+        height: 20px;
+        margin: 0 8px 10px 8px;
+        padding: 0;
+      }
+      /* Data table ------------------------------ */
+
+      .purchase {
+        width: 100%;
+        margin: 0;
+        padding: 35px 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+      }
+
+      .purchase_content {
+        width: 100%;
+        margin: 0;
+        padding: 25px 0 0 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+      }
+
+      .purchase_item {
+        padding: 10px 0;
+        color: #51545e;
+        font-size: 15px;
+        line-height: 18px;
+      }
+
+      .purchase_heading {
+        padding-bottom: 8px;
+        border-bottom: 1px solid #eaeaec;
+      }
+
+      .purchase_heading p {
+        margin: 0;
+        color: #85878e;
+        font-size: 12px;
+      }
+
+      .purchase_footer {
+        padding-top: 15px;
+        border-top: 1px solid #eaeaec;
+      }
+
+      .purchase_total {
+        margin: 0;
+        text-align: right;
+        font-weight: bold;
+        color: #333333;
+      }
+
+      .purchase_total--label {
+        padding: 0 15px 0 0;
+      }
+
+      body {
+        background-color: #f2f4f6;
+        color: #51545e;
+      }
+
+      p {
+        color: #51545e;
+      }
+
+      .email-wrapper {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+        background-color: #f2f4f6;
+      }
+
+      .email-content {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+      }
+      /* Masthead ----------------------- */
+
+      .email-masthead {
+        padding: 25px 0;
+        text-align: center;
+      }
+
+      .email-masthead_logo {
+        width: 94px;
+      }
+
+      .email-masthead_name {
+        font-size: 16px;
+        font-weight: bold;
+        color: #a8aaaf;
+        text-decoration: none;
+        text-shadow: 0 1px 0 white;
+      }
+      /* Body ------------------------------ */
+
+      .email-body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+      }
+
+      .email-body_inner {
+        width: 570px;
+        margin: 0 auto;
+        padding: 0;
+        -premailer-width: 570px;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+        background-color: #ffffff;
+      }
+
+      .email-footer {
+        width: 570px;
+        margin: 0 auto;
+        padding: 0;
+        -premailer-width: 570px;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+        text-align: center;
+      }
+
+      .body-action {
+        width: 100%;
+        margin: 30px auto;
+        padding: 0;
+        -premailer-width: 100%;
+        -premailer-cellpadding: 0;
+        -premailer-cellspacing: 0;
+        text-align: center;
+      }
+
+      .body-sub {
+        margin-top: 25px;
+        padding-top: 25px;
+        border-top: 1px solid #eaeaec;
+      }
+
+      .content-cell {
+        padding: 45px;
+      }
+    </style>
+  </head>
+  <body>
+    <span class=""preheader"">
+      Use this link to reset your password. The link is only valid for 24 hours.
+    </span>
+    <table class=""email-wrapper"" width=""100%"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
+      <tr>
+        <td align=""center"">
+          <table class=""email-content"" width=""100%"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
+            <tr>
+              <td class=""email-masthead"">
+                <a href=""https://example.com"" class=""f-fallback email-masthead_name"">
+                  Career Path
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td class=""email-body"" width=""570"" cellpadding=""0"" cellspacing=""0"">
+                <table class=""email-body_inner"" align=""center"" width=""570"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
+                  <tr>
+                    <td class=""content-cell"">
+                      <div class=""f-fallback"">
+                        <h1>Hi {{name}},</h1>
+                        <p>You recently requested to reset your password for your Career Path account. Use the button below to reset it.</p>
+                        <table class=""body-action"" align=""center"" width=""100%"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
+                          <tr>
+                            <td align=""center"">
+                              <table width=""100%"" border=""0"" cellspacing=""0"" cellpadding=""0"" role=""presentation"">
+                                <tr>
+                                  <td align=""center"">
+                                    <a href=""{{action_url}}"" class=""f-fallback button button--green"" target=""_blank"">Reset your password</a>
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                          </tr>
+                        </table>
+                        <p>Thanks, <br />The Career Path team</p>
+                        <table class=""body-sub"" role=""presentation"">
+                          <tr>
+                            <td>
+                              <p class=""f-fallback sub"">If you’re having trouble with the button above, copy and paste the URL below into your web browser.</p>
+                              <p class=""f-fallback sub"">{{action_url}}</p>
+                            </td>
+                          </tr>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table class=""email-footer"" align=""center"" width=""570"" cellpadding=""0"" cellspacing=""0"" role=""presentation"">
+                  <tr>
+                    <td class=""content-cell"" align=""center"">
+                      <p class=""f-fallback sub align-center"">
+                        Career Path
+                        <br />1234 Street Rd. <br />Cairo, Egypt
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>";
+
+        public static string GenerateEmailBody(Dictionary<string, string> emailBody)
+        {
+            string temp = ForgotPasswordTemplate;
+
+            foreach (var item in emailBody)
+            {
+                temp = temp.Replace(item.Key, item.Value);
+            }
+
+            return temp;
+        }
+    }
+}
+```
+
 ## File: Mapping/MappingConfigurations.cs
 ```csharp
 namespace Sportiva.Mapping;
@@ -5798,94 +4741,6 @@ public class MappingConfigurations : IRegister
 
 
 
-    }
-}
-```
-
-## File: Persistence/ApplicationDbContext.cs
-```csharp
-namespace Sportiva.Persistence;
-
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser, ApplicationRole, string>(options)
-{
-    public DbSet<UserProfile> UserProfiles { get; set; } = default!;
-    public DbSet<Post> Posts { get; set; } = default!;
-    public DbSet<PostLike> PostLikes { get; set; } = default!;
-    public DbSet<Club> Clubs { get; set; } = default!;
-    public DbSet<Court> Courts { get; set; } = default!;
-    public DbSet<TimeSlot> TimeSlots { get; set; } = default!;
-    public DbSet<Booking> Bookings { get; set; } = default!;
-    public DbSet<Review> Reviews { get; set; } = default!;
-    public DbSet<FriendlyMatch> FriendlyMatches { get; set; } = default!;
-    public DbSet<MatchJoinRequest> MatchJoinRequests { get; set; } = default!;
-    public DbSet<ClubSubscription> ClubSubscriptions { get; set; } = default!;
-    public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; } = default!;
-    public DbSet<MembershipUpgrade> MembershipUpgrades { get; set; } = default!;
-    public DbSet<Message> Messages { get; set; } = default!;
-    public DbSet<Notification> Notifications { get; set; } = default!;
-    public DbSet<NotificationPreference> NotificationPreferences { get; set; } = default!;
-    public DbSet<Tournament> Tournaments { get; set; } = default!;
-    public DbSet<TournamentMatch> TournamentMatches { get; set; } = default!;
-    public DbSet<TournamentParticipant> TournamentParticipants { get; set; } = default!;
-    public DbSet<PostComment> PostComments { get; set; } = default!;
-    public DbSet<CommentReaction> CommentReactions { get; set; } = default!;
-    public DbSet<CommentReply> CommentReplies { get; set; } = default!;
-    public DbSet<ReplyReaction> ReplyReactions { get; set; } = default!;
-    public DbSet<UserFollow> UserFollows { get; set; } = default!;
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
-
-        var cascadeFKs = modelBuilder.Model
-            .GetEntityTypes()
-            .SelectMany(t => t.GetForeignKeys())
-            .Where(fk => fk.DeleteBehavior == DeleteBehavior.Cascade && !fk.IsOwnership);
-
-        foreach (var fk in cascadeFKs)
-            fk.DeleteBehavior = DeleteBehavior.Restrict;
-
-        base.OnModelCreating(modelBuilder);
-    }
-}
-```
-
-## File: Persistence/EntitiesConfigurations/BookingConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class BookingConfiguration : IEntityTypeConfiguration<Booking>
-{
-    public void Configure(EntityTypeBuilder<Booking> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.Price)
-               .HasColumnType("decimal(18,2)")
-               .IsRequired();
-
-        builder.Property(x => x.Status)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        builder.HasQueryFilter(x => !x.IsDeleted);
-
-        builder.HasIndex(x => new { x.UserId, x.BookingDate });
-
-        builder.HasOne(x => x.Court)
-               .WithMany()
-               .HasForeignKey(x => x.CourtId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.TimeSlot)
-               .WithMany(t => t.Bookings)
-               .HasForeignKey(x => x.TimeSlotId)
-               .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.User)
-               .WithMany(u => u.Bookings)
-               .HasForeignKey(x => x.UserId)
-               .OnDelete(DeleteBehavior.Restrict);
     }
 }
 ```
@@ -5925,6 +4780,33 @@ public class ClubConfiguration : IEntityTypeConfiguration<Club>
 }
 ```
 
+## File: Persistence/EntitiesConfigurations/ClubSubscriptionConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class ClubSubscriptionConfiguration : IEntityTypeConfiguration<ClubSubscription>
+{
+    public void Configure(EntityTypeBuilder<ClubSubscription> builder)
+    {
+        builder.HasKey(x => x.Id);
+
+        builder.Ignore(x => x.IsActive); // Computed property
+
+        builder.HasIndex(x => new { x.ClubId, x.EndDate });
+
+        builder.HasOne(x => x.Plan)
+               .WithMany(p => p.ClubSubscriptions)
+               .HasForeignKey(x => x.PlanId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(x => x.Payments)
+               .WithOne(p => p.ClubSubscription)
+               .HasForeignKey(p => p.ClubSubscriptionId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+```
+
 ## File: Persistence/EntitiesConfigurations/CourtConfiguration.cs
 ```csharp
 namespace Sportiva.Persistence.EntitiesConfigurations;
@@ -5959,63 +4841,98 @@ public class CourtConfiguration : IEntityTypeConfiguration<Court>
 }
 ```
 
-## File: Persistence/EntitiesConfigurations/DefaultRoles.cs
+## File: Persistence/EntitiesConfigurations/FriendlyMatchConfiguration.cs
 ```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations; // ✅ تم تصحيح الـ namespace من Sportiva.Abstractions.Consts
+namespace Sportiva.Persistence.EntitiesConfigurations;
 
-public static class DefaultRoles
+public class FriendlyMatchConfiguration : IEntityTypeConfiguration<FriendlyMatch>
 {
-    public partial class Admin
+    public void Configure(EntityTypeBuilder<FriendlyMatch> builder)
     {
-        public const string Name = nameof(Admin);
-        public const string Id = "0191a4b6-c4fc-752e-9d95-40b5e4e68054";
-        public const string ConcurrencyStamp = "0191a4b6-c4fc-752e-9d95-40b631d1866d";
-    }
+        builder.HasKey(x => x.Id);
 
-    // ✅ تم حذف Role الـ Company لأنه مش متضاف في RoleConfiguration ولا في الـ Database Seed
-    // لو محتاجه، أضفه في RoleConfiguration بـ HasData
+        builder.Property(x => x.SportType)
+               .HasConversion<string>()
+               .HasMaxLength(50);
 
-    public partial class Member
-    {
-        public const string Name = nameof(Member);
-        public const string Id = "0191a4b6-c4fc-752e-9d95-40b7a5cb88f0";
-        public const string ConcurrencyStamp = "0191a4b6-c4fc-752e-9d95-40b85cf3fd22";
+        builder.Property(x => x.Status)
+               .HasConversion<string>()
+               .HasMaxLength(50);
+
+        builder.Property(x => x.Note).HasMaxLength(500);
+
+        builder.HasQueryFilter(x => !x.IsDeleted);
+
+        builder.HasIndex(x => new { x.Date, x.Status });
+
+        builder.HasOne(x => x.Organizer)
+               .WithMany(u => u.OrganizedMatches)
+               .HasForeignKey(x => x.OrganizerId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Court)
+               .WithMany()
+               .HasForeignKey(x => x.CourtId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(x => x.JoinRequests)
+               .WithOne(r => r.FriendlyMatch)
+               .HasForeignKey(r => r.FriendlyMatchId)
+               .OnDelete(DeleteBehavior.Cascade);
     }
 }
 ```
 
-## File: Persistence/EntitiesConfigurations/PostConfiguration.cs
+## File: Persistence/EntitiesConfigurations/MatchJoinRequestConfiguration.cs
 ```csharp
 namespace Sportiva.Persistence.EntitiesConfigurations;
 
-public class PostConfiguration : IEntityTypeConfiguration<Post>
+public class MatchJoinRequestConfiguration : IEntityTypeConfiguration<MatchJoinRequest>
 {
-    public void Configure(EntityTypeBuilder<Post> builder)
+    public void Configure(EntityTypeBuilder<MatchJoinRequest> builder)
     {
         builder.HasKey(x => x.Id);
 
-        builder.Property(x => x.Content)
-               .HasMaxLength(2000)
-               .IsRequired();
+        builder.Property(x => x.Status)
+               .HasConversion<string>()
+               .HasMaxLength(50);
 
-        builder.Property(x => x.FileUrl).HasMaxLength(500);
+        // لاعب واحد يقدر يطلب انضمام مرة واحدة لكل ماتش
+        builder.HasIndex(x => new { x.FriendlyMatchId, x.PlayerId }).IsUnique();
 
-        builder.HasQueryFilter(x => !x.IsDeleted);
+        builder.HasOne(x => x.FriendlyMatch)
+               .WithMany(m => m.JoinRequests)
+               .HasForeignKey(x => x.FriendlyMatchId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(x => x.Player)
+               .WithMany(u => u.MatchJoinRequests)
+               .HasForeignKey(x => x.PlayerId)
+               .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/MembershipUpgradeConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class MembershipUpgradeConfiguration : IEntityTypeConfiguration<MembershipUpgrade>
+{
+    public void Configure(EntityTypeBuilder<MembershipUpgrade> builder)
+    {
+        builder.HasKey(x => x.Id);
+
+        builder.Property(x => x.Status)
+               .HasConversion<string>()
+               .HasMaxLength(50);
+
+        builder.Property(x => x.Note).HasMaxLength(500);
 
         builder.HasOne(x => x.User)
-               .WithMany(p => p.Posts)
+               .WithMany(u => u.MembershipUpgradeRequests)
                .HasForeignKey(x => x.UserId)
-               .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasMany(x => x.Likes)
-               .WithOne(l => l.Post)
-               .HasForeignKey(l => l.PostId)
-               .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasMany(x => x.Comments)
-               .WithOne(c => c.Post)
-               .HasForeignKey(c => c.PostId)
-               .OnDelete(DeleteBehavior.Cascade);
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }
 ```
@@ -6047,60 +4964,71 @@ public class PostLikeConfiguration : IEntityTypeConfiguration<PostLike>
 }
 ```
 
-## File: Persistence/EntitiesConfigurations/RoleClaimConfiguration.cs
+## File: Persistence/EntitiesConfigurations/ReviewConfiguration.cs
 ```csharp
 namespace Sportiva.Persistence.EntitiesConfigurations;
 
-public class RoleClaimConfiguration : IEntityTypeConfiguration<IdentityRoleClaim<string>>
+public class ReviewConfiguration : IEntityTypeConfiguration<Review>
 {
-    public void Configure(EntityTypeBuilder<IdentityRoleClaim<string>> builder)
+    public void Configure(EntityTypeBuilder<Review> builder)
     {
-        //Default Data
-        var permissions = Permissions.GetAllPermissions();
-        var adminClaims = new List<IdentityRoleClaim<string>>();
+        builder.HasKey(x => x.Id);
 
-        for (var i = 0; i < permissions.Count; i++)
-        {
-            adminClaims.Add(new IdentityRoleClaim<string>
-            {
-                Id = i + 1,
-                ClaimType = Permissions.Type,
-                ClaimValue = permissions[i],
-                RoleId = DefaultRoles.Admin.Id
-            });
-        }
+        builder.Property(x => x.Rating)
+               .IsRequired();
 
-        builder.HasData(adminClaims);
+        // Rating لازم يكون بين 1 و 5
+        builder.ToTable(t => t.HasCheckConstraint("CK_Review_Rating", "[Rating] >= 1 AND [Rating] <= 5"));
+
+        builder.Property(x => x.Comment).HasMaxLength(1000);
+
+        builder.HasQueryFilter(x => !x.IsDeleted);
+
+        // يوزر واحد يعمل review واحد على كل booking
+        builder.HasIndex(x => new { x.UserId, x.BookingId }).IsUnique();
+
+        builder.HasOne(x => x.Court)
+               .WithMany()
+               .HasForeignKey(x => x.CourtId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.User)
+               .WithMany()
+               .HasForeignKey(x => x.UserId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Booking)
+               .WithMany()
+               .HasForeignKey(x => x.BookingId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }
 ```
 
-## File: Persistence/EntitiesConfigurations/RoleConfiguration.cs
+## File: Persistence/EntitiesConfigurations/SubscriptionPaymentConfiguration.cs
 ```csharp
 namespace Sportiva.Persistence.EntitiesConfigurations;
 
-public class RoleConfiguration : IEntityTypeConfiguration<ApplicationRole>
+public class SubscriptionPaymentConfiguration : IEntityTypeConfiguration<SubscriptionPayment>
 {
-    public void Configure(EntityTypeBuilder<ApplicationRole> builder)
+    public void Configure(EntityTypeBuilder<SubscriptionPayment> builder)
     {
-        //Default Data
-        builder.HasData([
-            new ApplicationRole
-            {
-                Id = DefaultRoles.Admin.Id,
-                Name = DefaultRoles.Admin.Name,
-                NormalizedName = DefaultRoles.Admin.Name.ToUpper(),
-                ConcurrencyStamp = DefaultRoles.Admin.ConcurrencyStamp
-            },
-            new ApplicationRole
-            {
-                Id = DefaultRoles.Member.Id,
-                Name = DefaultRoles.Member.Name,
-                NormalizedName = DefaultRoles.Member.Name.ToUpper(),
-                ConcurrencyStamp = DefaultRoles.Member.ConcurrencyStamp,
-                IsDefault = true
-            }
-        ]);
+        builder.HasKey(x => x.Id);
+
+        builder.Property(x => x.Amount)
+               .HasColumnType("decimal(18,2)")
+               .IsRequired();
+
+        builder.Property(x => x.Status)
+               .HasConversion<string>()
+               .HasMaxLength(50);
+
+        builder.Property(x => x.TransactionId).HasMaxLength(200);
+
+        builder.HasOne(x => x.ClubSubscription)
+               .WithMany(cs => cs.Payments)
+               .HasForeignKey(x => x.ClubSubscriptionId)
+               .OnDelete(DeleteBehavior.Cascade);
     }
 }
 ```
@@ -6160,152 +5088,38 @@ public class TimeSlotConfiguration : IEntityTypeConfiguration<TimeSlot>
 }
 ```
 
-## File: Persistence/EntitiesConfigurations/UserConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class UserConfiguration : IEntityTypeConfiguration<ApplicationUser>
+## File: Properties/launchSettings.json
+```json
 {
-    public void Configure(EntityTypeBuilder<ApplicationUser> builder)
-    {
-        builder.HasMany(x => x.RefreshTokens)
-            .WithOne()
-            .HasForeignKey(x => x.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
-        builder.Navigation(x => x.RefreshTokens).AutoInclude(false);
-
-        builder.Property(x => x.FirstName).HasMaxLength(100);
-        builder.Property(x => x.LastName).HasMaxLength(100);
-
-        builder.HasMany(x => x.Following)
-            .WithOne(f => f.Follower)
-            .HasForeignKey(f => f.FollowerId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasMany(x => x.Followers)
-            .WithOne(f => f.Following)
-            .HasForeignKey(f => f.FollowingId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasData(new ApplicationUser
-        {
-            Id = DefaultUsers.Admin.Id,
-            FirstName = "Sportiva",
-            LastName = "Admin",
-            UserName = DefaultUsers.Admin.Email,
-            NormalizedUserName = DefaultUsers.Admin.Email.ToUpper(),
-            Email = DefaultUsers.Admin.Email,
-            NormalizedEmail = DefaultUsers.Admin.Email.ToUpper(),
-            SecurityStamp = DefaultUsers.Admin.SecurityStamp,
-            ConcurrencyStamp = DefaultUsers.Admin.ConcurrencyStamp,
-            EmailConfirmed = true,
-            PasswordHash = DefaultUsers.Admin.PasswordHash,
-            CreatedAt = new DateTime(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-        });
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5250",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "https": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "https://localhost:7283;http://localhost:5250",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
     }
+  }
 }
-```
-
-## File: Persistence/EntitiesConfigurations/UserProfileConfiguration.cs
-```csharp
-namespace Sportiva.Persistence.EntitiesConfigurations;
-
-public class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
-{
-    public void Configure(EntityTypeBuilder<UserProfile> builder)
-    {
-        builder.HasKey(x => x.Id);
-
-        builder.Property(x => x.Bio).HasMaxLength(500);
-        builder.Property(x => x.City).HasMaxLength(100);
-        builder.Property(x => x.Country).HasMaxLength(100);
-        builder.Property(x => x.ProfilePictureUrl).HasMaxLength(500);
-        builder.Property(x => x.CoverImageUrl).HasMaxLength(500);
-        builder.Property(x => x.PreferredCity).HasMaxLength(100);
-
-        builder.Property(x => x.PreferredSport)
-               .HasConversion<string>()
-               .HasMaxLength(50);
-
-        builder.HasQueryFilter(x => !x.IsDeleted);
-
-        builder.HasIndex(x => x.UserId).IsUnique();
-
-        builder.HasOne(x => x.User)
-               .WithOne(x => x.UserProfile)
-               .HasForeignKey<UserProfile>(x => x.UserId);
-
-    }
-}
-```
-
-## File: Program.cs
-```csharp
-using Sportiva;
-
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDependencies(builder.Configuration);
-
-var app = builder.Build();
-
-app.UseHttpsRedirection();
-app.UseStaticFiles();
-
-app.UseCors();
-
-app.UseAuthentication();
-
-app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "careerPath V1");
-    });
-}
-
-app.MapControllers();
-
-app.Run();
 ```
 
 ## File: README.md
 ```markdown
 # SportivaForDepi
-```
-
-## File: repomix.config.json
-```json
-{
-  "output": {
-    "filePath": "ai-context.md",
-    "style": "markdown"
-  },
-  "ignore": {
-    "customPatterns": [
-      "ai-context.md",
-      "repomix-output.xml",
-      "keys/**",
-      "wwwroot/**",
-      "**/*.xml",
-      "**/*.csproj",
-      "**/*.sln",
-      "**/*.user",
-      "**/*.designer.cs",
-      "**/*.g.cs",
-      "**/bin/**",
-      "**/obj/**",
-      "**/.vs/**",
-      "**/Migrations/**"
-    ]
-  }
-}
-
-//repomix --include "Persistence/**,Entities/**,Services/**,Errors/**,Contracts/**"
-//repomix --include "Contracts/**"
-//repomix --include "Contracts/Posts/**,Controllers/PostsController.cs,Controllers/CommentsController.cs,Services/IPostService.cs,Services/ICommentService.cs,Errors/PostErrors.cs,Errors/CommentErrors.cs"
-//tree /F /A > tree.txt
 ```
 
 ## File: Services/Abstraction/IAuthService.cs
@@ -8374,6 +7188,29 @@ public class GoogleOAuthOptions
 }
 ```
 
+## File: Settings/MailSettings.cs
+```csharp
+namespace Sportiva.Settings;
+
+public class MailSettings
+{
+    [Required, EmailAddress]
+    public string Mail { get; set; } = string.Empty;
+
+    [Required]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [Required]
+    public string Password { get; set; } = string.Empty;
+
+    [Required]
+    public string Host { get; set; } = string.Empty;
+
+    [Range(100, 999)]
+    public int Port { get; set; }
+}
+```
+
 ## File: sportiva-api-reference.html
 ```html
 <!DOCTYPE html>
@@ -9166,10 +8003,691 @@ sections.forEach(s => obs.observe(s));
 </html>
 ```
 
+## File: .gitignore
+```
+appsettings.json
+bin/
+obj/
+.vs/
+*.user
+wwwroot/uploads/
+```
+
+## File: Authentication/JwtProvider.cs
+```csharp
+namespace Sportiva.Authentication;
+
+public class JwtProvider(IOptions<JwtOptions> options) : IJwtProvider
+{
+    private readonly JwtOptions _options = options.Value;
+
+    public (string token, int expiresIn) GenerateToken(ApplicationUser user, IEnumerable<string> roles, IEnumerable<string> permissions)
+    {
+        Claim[] claims = [
+            new(JwtRegisteredClaimNames.Sub, user.Id),
+            new(JwtRegisteredClaimNames.Email, user.Email!),
+            new(JwtRegisteredClaimNames.GivenName, user.FirstName),
+            new(JwtRegisteredClaimNames.FamilyName, user.LastName),
+            new(JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString()),
+            new(nameof(roles), JsonSerializer.Serialize(roles), JsonClaimValueTypes.JsonArray),
+            new(nameof(permissions), JsonSerializer.Serialize(permissions), JsonClaimValueTypes.JsonArray)
+        ];
+
+        var symmetricSecurityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
+
+        var singingCredentials = new SigningCredentials(symmetricSecurityKey, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: _options.Issuer,
+            audience: _options.Audience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(_options.ExpiryMinutes),
+            signingCredentials: singingCredentials
+        );
+
+        return (token: new JwtSecurityTokenHandler().WriteToken(token), expiresIn: _options.ExpiryMinutes * 60);
+    }
+
+    public string? ValidateToken(string token, bool validateLifetime = true)
+    {
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var symmetricSecurityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
+
+        try
+        {
+            tokenHandler.ValidateToken(token, new TokenValidationParameters
+            {
+                IssuerSigningKey = symmetricSecurityKey,
+                ValidateIssuerSigningKey = true,
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                ValidateLifetime = validateLifetime, // ← السطر ده بس
+                ClockSkew = TimeSpan.Zero
+            }, out SecurityToken validatedToken);
+
+            var jwtToken = (JwtSecurityToken)validatedToken;
+            return jwtToken.Claims.First(x => x.Type == JwtRegisteredClaimNames.Sub).Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+}
+```
+
+## File: DependencyInjection.cs
+```csharp
+using Hangfire;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Sportiva.Services;
+
+namespace Sportiva;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddDependencies(this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddControllers(options =>
+        {
+            options.Filters.Add<CancellationExceptionFilter>();
+        })
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(
+                new JsonStringEnumConverter()
+            );
+        });
+
+        services.AddOpenApi();
+
+        services.AddCors(options =>
+            options.AddDefaultPolicy(builder =>
+                builder
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .WithOrigins(
+                    "http://localhost:5173",
+                    "https://front-end-project-bay-seven.vercel.app"
+                        )
+                .AllowCredentials()
+            )
+        );
+
+        services.AddAuthConfig(configuration);
+
+        var connectionString = configuration.GetConnectionString("DefaultConnection") ??
+            throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+        services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseSqlServer(connectionString));
+
+        services
+            .AddMapsterConfig()
+            .AddFluentValidationConfig();
+        services.AddSignalR();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IEmailSender, EmailService>();
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IPostService, PostService>();
+        services.AddScoped<ICommentService, CommentService>();
+        services.AddHttpClient();
+        services.AddHttpContextAccessor();
+        services.AddBackgroundJobsConfig(configuration);
+
+        services.AddOptions<MailSettings>()
+            .BindConfiguration(nameof(MailSettings))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        return services;
+    }
+
+    // ==================== Mapster ====================
+    private static IServiceCollection AddMapsterConfig(this IServiceCollection services)
+    {
+        var mappingConfig = TypeAdapterConfig.GlobalSettings;
+        mappingConfig.Scan(Assembly.GetExecutingAssembly());
+
+        services.AddSingleton<IMapper>(new Mapper(mappingConfig));
+        return services;
+    }
+
+    // ==================== FluentValidation ====================
+    private static IServiceCollection AddFluentValidationConfig(this IServiceCollection services)
+    {
+        services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
+        return services;
+    }
+
+    // ==================== AUTH CONFIG ====================
+    private static IServiceCollection AddAuthConfig(this IServiceCollection services,
+ IConfiguration configuration)
+    {
+        services.AddIdentity<ApplicationUser, ApplicationRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddDefaultTokenProviders();
+
+        services.AddTransient<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddTransient<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
+        services.AddSingleton<IJwtProvider, JwtProvider>();
+
+        services.AddOptions<JwtOptions>()
+            .BindConfiguration(JwtOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        var jwtSettings = configuration
+            .GetSection(JwtOptions.SectionName)
+            .Get<JwtOptions>();
+
+        // ── Read OAuth config ───────────────────────────────────────────────
+        var googleConfig = configuration
+            .GetSection(GoogleOAuthOptions.SectionName)
+            .Get<GoogleOAuthOptions>();
+
+        var githubConfig = configuration
+            .GetSection(GitHubOAuthOptions.SectionName)
+            .Get<GitHubOAuthOptions>();
+
+        // ── Bind options so they can be injected anywhere via IOptions<T> ──
+        services.Configure<GoogleOAuthOptions>(
+            configuration.GetSection(GoogleOAuthOptions.SectionName));
+
+        services.Configure<GitHubOAuthOptions>(
+            configuration.GetSection(GitHubOAuthOptions.SectionName));
+
+        // ── Authentication pipeline ─────────────────────────────────────────
+        var authBuilder = services.AddAuthentication(options =>
+        {
+            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.SaveToken = true;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                IssuerSigningKey = new SymmetricSecurityKey(
+                    Encoding.UTF8.GetBytes(jwtSettings!.Key)),
+                ValidIssuer = jwtSettings.Issuer,
+                ValidAudience = jwtSettings.Audience
+            };
+
+            // ── SignalR JWT from Query String ───────────────────────────────
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    var path = context.HttpContext.Request.Path;
+
+                    if (!string.IsNullOrEmpty(accessToken) &&
+                        path.StartsWithSegments("/hubs"))
+                    {
+                        context.Token = accessToken;
+                    }
+
+                    return Task.CompletedTask;
+                }
+            };
+        });
+
+        // ── Google OAuth (only if configured) ──────────────────────────────
+        if (!string.IsNullOrWhiteSpace(googleConfig?.ClientId) &&
+            !string.IsNullOrWhiteSpace(googleConfig?.ClientSecret))
+        {
+            authBuilder.AddGoogle(options =>
+            {
+                options.ClientId = googleConfig.ClientId;
+                options.ClientSecret = googleConfig.ClientSecret;
+                options.SaveTokens = true;
+
+                if (!string.IsNullOrWhiteSpace(googleConfig.RedirectUri))
+                    options.CallbackPath = googleConfig.RedirectUri;
+
+                foreach (var scope in googleConfig.Scopes ?? ["email", "profile"])
+                    options.Scope.Add(scope);
+            });
+        }
+
+        // ── GitHub OAuth (only if configured) ──────────────────────────────
+        if (!string.IsNullOrWhiteSpace(githubConfig?.ClientId) &&
+            !string.IsNullOrWhiteSpace(githubConfig?.ClientSecret))
+        {
+            authBuilder.AddGitHub(options =>
+            {
+                options.ClientId = githubConfig.ClientId;
+                options.ClientSecret = githubConfig.ClientSecret;
+                options.CallbackPath = "/signin-github";
+                options.SaveTokens = true;
+
+                foreach (var scope in githubConfig.Scopes ?? ["user:email"])
+                    options.Scope.Add(scope);
+            });
+        }
+
+        // ── Prevent cookie redirects on API endpoints → return 401/403 ─────
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.Events = new Microsoft.AspNetCore.Authentication.Cookies
+                .CookieAuthenticationEvents
+            {
+                OnRedirectToLogin = ctx =>
+                {
+                    if (ctx.Request.Path.StartsWithSegments("/api") ||
+                        ctx.Request.Headers["Accept"].ToString()
+                           .Contains("application/json"))
+                    {
+                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    }
+                    ctx.Response.Redirect(ctx.RedirectUri);
+                    return Task.CompletedTask;
+                },
+                OnRedirectToAccessDenied = ctx =>
+                {
+                    if (ctx.Request.Path.StartsWithSegments("/api") ||
+                        ctx.Request.Headers["Accept"].ToString()
+                           .Contains("application/json"))
+                    {
+                        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        return Task.CompletedTask;
+                    }
+                    ctx.Response.Redirect(ctx.RedirectUri);
+                    return Task.CompletedTask;
+                }
+            };
+        });
+
+        services.Configure<IdentityOptions>(options =>
+        {
+            options.Password.RequiredLength = 8;
+            options.SignIn.RequireConfirmedEmail = true;
+            options.User.RequireUniqueEmail = true;
+        });
+
+        return services;
+    }
+    // ==================== Hangfire ====================
+    private static IServiceCollection AddBackgroundJobsConfig(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(
+                configuration.GetConnectionString("HangfireConnection")));
+
+        services.AddHangfireServer();
+
+        return services;
+    }
+}
+```
+
+## File: Persistence/ApplicationDbContext.cs
+```csharp
+namespace Sportiva.Persistence;
+
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser, ApplicationRole, string>(options)
+{
+    public DbSet<UserProfile> UserProfiles { get; set; } = default!;
+    public DbSet<Post> Posts { get; set; } = default!;
+    public DbSet<PostLike> PostLikes { get; set; } = default!;
+    public DbSet<Club> Clubs { get; set; } = default!;
+    public DbSet<Court> Courts { get; set; } = default!;
+    public DbSet<TimeSlot> TimeSlots { get; set; } = default!;
+    public DbSet<Booking> Bookings { get; set; } = default!;
+    public DbSet<Review> Reviews { get; set; } = default!;
+    public DbSet<FriendlyMatch> FriendlyMatches { get; set; } = default!;
+    public DbSet<MatchJoinRequest> MatchJoinRequests { get; set; } = default!;
+    public DbSet<ClubSubscription> ClubSubscriptions { get; set; } = default!;
+    public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; } = default!;
+    public DbSet<MembershipUpgrade> MembershipUpgrades { get; set; } = default!;
+    public DbSet<Message> Messages { get; set; } = default!;
+    public DbSet<Notification> Notifications { get; set; } = default!;
+    public DbSet<NotificationPreference> NotificationPreferences { get; set; } = default!;
+    public DbSet<Tournament> Tournaments { get; set; } = default!;
+    public DbSet<TournamentMatch> TournamentMatches { get; set; } = default!;
+    public DbSet<TournamentParticipant> TournamentParticipants { get; set; } = default!;
+    public DbSet<PostComment> PostComments { get; set; } = default!;
+    public DbSet<CommentReaction> CommentReactions { get; set; } = default!;
+    public DbSet<CommentReply> CommentReplies { get; set; } = default!;
+    public DbSet<ReplyReaction> ReplyReactions { get; set; } = default!;
+    public DbSet<UserFollow> UserFollows { get; set; } = default!;
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
+
+        var cascadeFKs = modelBuilder.Model
+            .GetEntityTypes()
+            .SelectMany(t => t.GetForeignKeys())
+            .Where(fk => fk.DeleteBehavior == DeleteBehavior.Cascade && !fk.IsOwnership);
+
+        foreach (var fk in cascadeFKs)
+            fk.DeleteBehavior = DeleteBehavior.Restrict;
+
+        base.OnModelCreating(modelBuilder);
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/BookingConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class BookingConfiguration : IEntityTypeConfiguration<Booking>
+{
+    public void Configure(EntityTypeBuilder<Booking> builder)
+    {
+        builder.HasKey(x => x.Id);
+
+        builder.Property(x => x.Price)
+               .HasColumnType("decimal(18,2)")
+               .IsRequired();
+
+        builder.Property(x => x.Status)
+               .HasConversion<string>()
+               .HasMaxLength(50);
+
+        builder.HasQueryFilter(x => !x.IsDeleted);
+
+        builder.HasIndex(x => new { x.UserId, x.BookingDate });
+
+        builder.HasOne(x => x.Court)
+               .WithMany()
+               .HasForeignKey(x => x.CourtId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.TimeSlot)
+               .WithMany(t => t.Bookings)
+               .HasForeignKey(x => x.TimeSlotId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.User)
+               .WithMany(u => u.Bookings)
+               .HasForeignKey(x => x.UserId)
+               .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/DefaultRoles.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations; // ✅ تم تصحيح الـ namespace من Sportiva.Abstractions.Consts
+
+public static class DefaultRoles
+{
+    public partial class Admin
+    {
+        public const string Name = nameof(Admin);
+        public const string Id = "0191a4b6-c4fc-752e-9d95-40b5e4e68054";
+        public const string ConcurrencyStamp = "0191a4b6-c4fc-752e-9d95-40b631d1866d";
+    }
+
+    // ✅ تم حذف Role الـ Company لأنه مش متضاف في RoleConfiguration ولا في الـ Database Seed
+    // لو محتاجه، أضفه في RoleConfiguration بـ HasData
+
+    public partial class Member
+    {
+        public const string Name = nameof(Member);
+        public const string Id = "0191a4b6-c4fc-752e-9d95-40b7a5cb88f0";
+        public const string ConcurrencyStamp = "0191a4b6-c4fc-752e-9d95-40b85cf3fd22";
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/PostConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class PostConfiguration : IEntityTypeConfiguration<Post>
+{
+    public void Configure(EntityTypeBuilder<Post> builder)
+    {
+        builder.HasKey(x => x.Id);
+
+        builder.Property(x => x.Content)
+               .HasMaxLength(2000)
+               .IsRequired();
+
+        builder.Property(x => x.FileUrl).HasMaxLength(500);
+
+        builder.HasQueryFilter(x => !x.IsDeleted);
+
+        builder.HasOne(x => x.User)
+               .WithMany(p => p.Posts)
+               .HasForeignKey(x => x.UserId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.Likes)
+               .WithOne(l => l.Post)
+               .HasForeignKey(l => l.PostId)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.Comments)
+               .WithOne(c => c.Post)
+               .HasForeignKey(c => c.PostId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/RoleClaimConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class RoleClaimConfiguration : IEntityTypeConfiguration<IdentityRoleClaim<string>>
+{
+    public void Configure(EntityTypeBuilder<IdentityRoleClaim<string>> builder)
+    {
+        //Default Data
+        var permissions = Permissions.GetAllPermissions();
+        var adminClaims = new List<IdentityRoleClaim<string>>();
+
+        for (var i = 0; i < permissions.Count; i++)
+        {
+            adminClaims.Add(new IdentityRoleClaim<string>
+            {
+                Id = i + 1,
+                ClaimType = Permissions.Type,
+                ClaimValue = permissions[i],
+                RoleId = DefaultRoles.Admin.Id
+            });
+        }
+
+        builder.HasData(adminClaims);
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/RoleConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class RoleConfiguration : IEntityTypeConfiguration<ApplicationRole>
+{
+    public void Configure(EntityTypeBuilder<ApplicationRole> builder)
+    {
+        //Default Data
+        builder.HasData([
+            new ApplicationRole
+            {
+                Id = DefaultRoles.Admin.Id,
+                Name = DefaultRoles.Admin.Name,
+                NormalizedName = DefaultRoles.Admin.Name.ToUpper(),
+                ConcurrencyStamp = DefaultRoles.Admin.ConcurrencyStamp
+            },
+            new ApplicationRole
+            {
+                Id = DefaultRoles.Member.Id,
+                Name = DefaultRoles.Member.Name,
+                NormalizedName = DefaultRoles.Member.Name.ToUpper(),
+                ConcurrencyStamp = DefaultRoles.Member.ConcurrencyStamp,
+                IsDefault = true
+            }
+        ]);
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/UserConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class UserConfiguration : IEntityTypeConfiguration<ApplicationUser>
+{
+    public void Configure(EntityTypeBuilder<ApplicationUser> builder)
+    {
+        builder.HasMany(x => x.RefreshTokens)
+            .WithOne()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.RefreshTokens).AutoInclude(false);
+
+        builder.Property(x => x.FirstName).HasMaxLength(100);
+        builder.Property(x => x.LastName).HasMaxLength(100);
+
+        builder.HasMany(x => x.Following)
+            .WithOne(f => f.Follower)
+            .HasForeignKey(f => f.FollowerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(x => x.Followers)
+            .WithOne(f => f.Following)
+            .HasForeignKey(f => f.FollowingId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasData(new ApplicationUser
+        {
+            Id = DefaultUsers.Admin.Id,
+            FirstName = "Sportiva",
+            LastName = "Admin",
+            UserName = DefaultUsers.Admin.Email,
+            NormalizedUserName = DefaultUsers.Admin.Email.ToUpper(),
+            Email = DefaultUsers.Admin.Email,
+            NormalizedEmail = DefaultUsers.Admin.Email.ToUpper(),
+            SecurityStamp = DefaultUsers.Admin.SecurityStamp,
+            ConcurrencyStamp = DefaultUsers.Admin.ConcurrencyStamp,
+            EmailConfirmed = true,
+            PasswordHash = DefaultUsers.Admin.PasswordHash,
+            CreatedAt = new DateTime(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+    }
+}
+```
+
+## File: Persistence/EntitiesConfigurations/UserProfileConfiguration.cs
+```csharp
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
+{
+    public void Configure(EntityTypeBuilder<UserProfile> builder)
+    {
+        builder.HasKey(x => x.Id);
+
+        builder.Property(x => x.Bio).HasMaxLength(500);
+        builder.Property(x => x.City).HasMaxLength(100);
+        builder.Property(x => x.Country).HasMaxLength(100);
+        builder.Property(x => x.ProfilePictureUrl).HasMaxLength(500);
+        builder.Property(x => x.CoverImageUrl).HasMaxLength(500);
+        builder.Property(x => x.PreferredCity).HasMaxLength(100);
+
+        builder.Property(x => x.PreferredSport)
+               .HasConversion<string>()
+               .HasMaxLength(50);
+
+        builder.HasQueryFilter(x => !x.IsDeleted);
+
+        builder.HasIndex(x => x.UserId).IsUnique();
+
+        builder.HasOne(x => x.User)
+               .WithOne(x => x.UserProfile)
+               .HasForeignKey<UserProfile>(x => x.UserId);
+
+    }
+}
+```
+
+## File: Program.cs
+```csharp
+using Sportiva;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddDependencies(builder.Configuration);
+
+var app = builder.Build();
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+app.UseCors();
+
+app.UseAuthentication();
+
+app.UseAuthorization();
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "careerPath V1");
+    });
+}
+
+app.MapControllers();
+
+app.Run();
+```
+
+## File: repomix.config.json
+```json
+{
+  "output": {
+    "filePath": "ai-context.md",
+    "style": "markdown"
+  },
+  "ignore": {
+    "customPatterns": [
+      "ai-context.md",
+      "repomix-output.xml",
+      "keys/**",
+      "wwwroot/**",
+      "**/*.xml",
+      "**/*.csproj",
+      "**/*.sln",
+      "**/*.user",
+      "**/*.designer.cs",
+      "**/*.g.cs",
+      "**/bin/**",
+      "**/obj/**",
+      "**/.vs/**",
+      "**/Migrations/**"
+    ]
+  }
+}
+
+//repomix --include "Persistence/**,Entities/**,Services/**,Errors/**,Contracts/**"
+//repomix --include "Contracts/**"
+//repomix --include "Contracts/Posts/**,Controllers/PostsController.cs,Controllers/CommentsController.cs,Services/IPostService.cs,Services/ICommentService.cs,Errors/PostErrors.cs,Errors/CommentErrors.cs"
+//tree /F /A > tree.txt
+```
+
 ## File: tree.txt
 ```
 Folder PATH listing
-Volume serial number is 000000FC 28EE:D16A
+Volume serial number is 00000092 28EE:D16A
 C:.
 |   .gitignore
 |   ai-context.md
@@ -9202,13 +8720,120 @@ C:.
 |           RegexPatterns.cs
 |           
 +---Authentication
-|       IJwtProvider.cs
-|       JwtOptions.cs
-|       JwtProvider.cs
-|       
+|   |   IJwtProvider.cs
+|   |   JwtOptions.cs
+|   |   JwtProvider.cs
+|   |   
+|   \---Filters
+|           HasPermissionAttribute.cs
+|           PermissionAuthorizationHandler.cs
+|           PermissionAuthorizationPolicyProvider.cs
+|           PermissionRequirement.cs
+|           
 +---bin
 |   \---Debug
 |       \---net10.0
+|           |   appsettings.json
+|           |   Asp.Versioning.Abstractions.dll
+|           |   Asp.Versioning.Http.dll
+|           |   Asp.Versioning.Mvc.ApiExplorer.dll
+|           |   Asp.Versioning.Mvc.dll
+|           |   AspNet.Security.OAuth.GitHub.dll
+|           |   Azure.Core.dll
+|           |   Azure.Identity.dll
+|           |   BouncyCastle.Cryptography.dll
+|           |   CloudinaryDotNet.dll
+|           |   FluentValidation.AspNetCore.dll
+|           |   FluentValidation.DependencyInjectionExtensions.dll
+|           |   FluentValidation.dll
+|           |   Hangfire.AspNetCore.dll
+|           |   Hangfire.Core.dll
+|           |   Hangfire.NetCore.dll
+|           |   Hangfire.SqlServer.dll
+|           |   HangfireBasicAuthenticationFilter.dll
+|           |   HealthChecks.Hangfire.dll
+|           |   HealthChecks.SqlServer.dll
+|           |   HealthChecks.UI.Client.dll
+|           |   HealthChecks.UI.Core.dll
+|           |   HealthChecks.Uris.dll
+|           |   HtmlAgilityPack.CssSelectors.NetCore.dll
+|           |   HtmlAgilityPack.dll
+|           |   Humanizer.dll
+|           |   MailKit.dll
+|           |   Mapster.Core.dll
+|           |   Mapster.DependencyInjection.dll
+|           |   Mapster.dll
+|           |   MediatR.Contracts.dll
+|           |   MediatR.dll
+|           |   Microsoft.AspNetCore.Authentication.Google.dll
+|           |   Microsoft.AspNetCore.Authentication.JwtBearer.dll
+|           |   Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
+|           |   Microsoft.AspNetCore.OpenApi.dll
+|           |   Microsoft.Bcl.AsyncInterfaces.dll
+|           |   Microsoft.Bcl.Cryptography.dll
+|           |   Microsoft.Build.Framework.dll
+|           |   Microsoft.CodeAnalysis.CSharp.dll
+|           |   Microsoft.CodeAnalysis.CSharp.Workspaces.dll
+|           |   Microsoft.CodeAnalysis.dll
+|           |   Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.dll
+|           |   Microsoft.CodeAnalysis.Workspaces.dll
+|           |   Microsoft.CodeAnalysis.Workspaces.MSBuild.dll
+|           |   Microsoft.Data.SqlClient.dll
+|           |   Microsoft.EntityFrameworkCore.Abstractions.dll
+|           |   Microsoft.EntityFrameworkCore.Design.dll
+|           |   Microsoft.EntityFrameworkCore.dll
+|           |   Microsoft.EntityFrameworkCore.Relational.dll
+|           |   Microsoft.EntityFrameworkCore.SqlServer.dll
+|           |   Microsoft.Extensions.Caching.Hybrid.dll
+|           |   Microsoft.Extensions.DependencyModel.dll
+|           |   Microsoft.Identity.Client.dll
+|           |   Microsoft.Identity.Client.Extensions.Msal.dll
+|           |   Microsoft.IdentityModel.Abstractions.dll
+|           |   Microsoft.IdentityModel.JsonWebTokens.dll
+|           |   Microsoft.IdentityModel.Logging.dll
+|           |   Microsoft.IdentityModel.Protocols.dll
+|           |   Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+|           |   Microsoft.IdentityModel.Tokens.dll
+|           |   Microsoft.OpenApi.dll
+|           |   Microsoft.SqlServer.Server.dll
+|           |   Microsoft.VisualStudio.SolutionPersistence.dll
+|           |   MimeKit.dll
+|           |   Mono.TextTemplating.dll
+|           |   Newtonsoft.Json.dll
+|           |   OneOf.dll
+|           |   repomix.config.json
+|           |   Scalar.AspNetCore.dll
+|           |   Serilog.AspNetCore.dll
+|           |   Serilog.dll
+|           |   Serilog.Extensions.Hosting.dll
+|           |   Serilog.Extensions.Logging.dll
+|           |   Serilog.Formatting.Compact.dll
+|           |   Serilog.Settings.Configuration.dll
+|           |   Serilog.Sinks.Console.dll
+|           |   Serilog.Sinks.Debug.dll
+|           |   Serilog.Sinks.File.dll
+|           |   Sportiva.deps.json
+|           |   Sportiva.dll
+|           |   Sportiva.exe
+|           |   Sportiva.pdb
+|           |   Sportiva.runtimeconfig.json
+|           |   Sportiva.staticwebassets.endpoints.json
+|           |   Sportiva.staticwebassets.runtime.json
+|           |   Swashbuckle.AspNetCore.SwaggerUI.dll
+|           |   System.ClientModel.dll
+|           |   System.CodeDom.dll
+|           |   System.Composition.AttributedModel.dll
+|           |   System.Composition.Convention.dll
+|           |   System.Composition.Hosting.dll
+|           |   System.Composition.Runtime.dll
+|           |   System.Composition.TypedParts.dll
+|           |   System.Configuration.ConfigurationManager.dll
+|           |   System.IdentityModel.Tokens.Jwt.dll
+|           |   System.Linq.Dynamic.Core.dll
+|           |   System.Memory.Data.dll
+|           |   System.Security.Cryptography.ProtectedData.dll
+|           |   System.Xml.XPath.XmlDocument.dll
+|           |   
 |           +---BuildHost-net472
 |           |   |   Microsoft.Build.Locator.dll
 |           |   |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe
@@ -9311,45 +8936,183 @@ C:.
 |           |           System.CommandLine.resources.dll
 |           |           
 |           +---ca
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---cs
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---de
+|           |       Hangfire.Core.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---es
+|           |       Hangfire.Core.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---fa
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---fr
+|           |       Hangfire.Core.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---it
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---ja
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---ko
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---nb
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---nl
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---pl
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---pt
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---pt-BR
+|           |       Hangfire.Core.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---pt-PT
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---ru
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---runtimes
 |           |   +---unix
 |           |   |   \---lib
 |           |   |       \---net9.0
+|           |   |               Microsoft.Data.SqlClient.dll
+|           |   |               
 |           |   +---win
 |           |   |   \---lib
 |           |   |       \---net9.0
+|           |   |               Microsoft.Data.SqlClient.dll
+|           |   |               
 |           |   +---win-arm64
 |           |   |   \---native
+|           |   |           Microsoft.Data.SqlClient.SNI.dll
+|           |   |           
 |           |   +---win-x64
 |           |   |   \---native
+|           |   |           Microsoft.Data.SqlClient.SNI.dll
+|           |   |           
 |           |   \---win-x86
 |           |       \---native
+|           |               Microsoft.Data.SqlClient.SNI.dll
+|           |               
 |           +---sv
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---tr
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---tr-TR
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---zh
+|           |       Hangfire.Core.resources.dll
+|           |       
 |           +---zh-Hans
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           +---zh-Hant
+|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|           |       Microsoft.CodeAnalysis.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
+|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|           |       Microsoft.Data.SqlClient.resources.dll
+|           |       
 |           \---zh-TW
+|                   Hangfire.Core.resources.dll
+|                   
 +---Contracts
 |   +---Authentication
 |   |       AuthResponse.cs
+|   |       ConfirmEmailRequest.cs
+|   |       ConfirmEmailRequestValidator.cs
+|   |       ForgetPasswordRequest.cs
+|   |       ForgetPasswordRequestValidator.cs
 |   |       LoginRequest.cs
+|   |       LoginRequestValidator.cs
+|   |       RefreshTokenRequest.cs
+|   |       RefreshTokenRequestValidator.cs
+|   |       RegisterRequest.cs
+|   |       RegisterRequestValidator.cs
+|   |       ResendConfirmationEmailRequest.cs
+|   |       ResendConfirmationEmailRequestValidator.cs
+|   |       ResetPasswordRequest.cs
+|   |       ResetPasswordRequestValidator.cs
 |   |       
 |   +---Bookings
 |   |       BookingResponse.cs
@@ -9469,8 +9232,6 @@ C:.
 |       CommentsController.cs
 |       PostsController.cs
 |       ProfilesController.cs
-|       RolesController.cs
-|       UsersController.cs
 |       
 +---Entities
 |       ApplicationRole.cs
@@ -9503,15 +9264,19 @@ C:.
 |       UserProfile.cs
 |       
 +---Enums
-|       TournamentStatus.cs
+|       BookingStatus.cs
+|       JoinRequestStatus.cs
+|       MatchStatus.cs
+|       NotificationPriority.cs
+|       NotificationType.cs
+|       PaymentStatus.cs
+|       RequestStatus.cs
+|       SportType.cs
 |       
 +---Errors
 |       CommentErrors.cs
-|       MembershipUpgradeErrors.cs
 |       PostErrors.cs
 |       ProfileErrors.cs
-|       RoleErrors.cs
-|       SubscriptionPlanErrors.cs
 |       UserErrors.cs
 |       
 +---Extensions
@@ -9548,6 +9313,9 @@ C:.
 |           |   .NETCoreApp,Version=v10.0.AssemblyAttributes.cs
 |           |   ApiEndpoints.json
 |           |   apphost.exe
+|           |   rjimswa.dswa.cache.json
+|           |   rjsmcshtml.dswa.cache.json
+|           |   rjsmrazor.dswa.cache.json
 |           |   rpswa.dswa.cache.json
 |           |   Sportiva.AssemblyInfo.cs
 |           |   Sportiva.AssemblyInfoInputs.cache
@@ -9556,25 +9324,39 @@ C:.
 |           |   Sportiva.csproj.BuildWithSkipAnalyzers
 |           |   Sportiva.csproj.CoreCompileInputs.cache
 |           |   Sportiva.csproj.FileListAbsolute.txt
+|           |   Sportiva.csproj.Up2Date
+|           |   Sportiva.dll
 |           |   Sportiva.GeneratedMSBuildEditorConfig.editorconfig
+|           |   Sportiva.genruntimeconfig.cache
 |           |   Sportiva.GlobalUsings.g.cs
 |           |   Sportiva.MvcApplicationPartsAssemblyInfo.cache
 |           |   Sportiva.MvcApplicationPartsAssemblyInfo.cs
+|           |   Sportiva.pdb
 |           |   Sportiva.sourcelink.json
 |           |   SportivaModels.AssemblyInfo.cs
 |           |   SportivaModels.AssemblyInfoInputs.cache
 |           |   SportivaModels.assets.cache
 |           |   SportivaModels.GeneratedMSBuildEditorConfig.editorconfig
 |           |   SportivaModels.GlobalUsings.g.cs
+|           |   staticwebassets.build.endpoints.json
+|           |   staticwebassets.build.json
+|           |   staticwebassets.build.json.cache
+|           |   staticwebassets.development.json
 |           |   staticwebassets.references.upToDateCheck.txt
 |           |   staticwebassets.removed.txt
+|           |   staticwebassets.upToDateCheck.txt
+|           |   swae.build.ex.cache
 |           |   
 |           +---EndpointInfo
 |           |       Sportiva.json
 |           |       Sportiva.OpenApiFiles.cache
 |           |       
 |           +---ref
+|           |       Sportiva.dll
+|           |       
 |           +---refint
+|           |       Sportiva.dll
+|           |       
 |           \---staticwebassets
 +---Persistence
 |   |   ApplicationDbContext.cs
@@ -9582,18 +9364,27 @@ C:.
 |   +---EntitiesConfigurations
 |   |       BookingConfiguration.cs
 |   |       ClubConfiguration.cs
+|   |       ClubSubscriptionConfiguration.cs
 |   |       CourtConfiguration.cs
 |   |       DefaultRoles.cs
+|   |       FriendlyMatchConfiguration.cs
+|   |       MatchJoinRequestConfiguration.cs
+|   |       MembershipUpgradeConfiguration.cs
 |   |       PostConfiguration.cs
 |   |       PostLikeConfiguration.cs
+|   |       ReviewConfiguration.cs
 |   |       RoleClaimConfiguration.cs
 |   |       RoleConfiguration.cs
+|   |       SubscriptionPaymentConfiguration.cs
 |   |       SubscriptionPlanConfiguration.cs
 |   |       TimeSlotConfiguration.cs
 |   |       UserConfiguration.cs
 |   |       UserProfileConfiguration.cs
 |   |       
 |   \---Migrations
++---Properties
+|       launchSettings.json
+|       
 +---Services
 |   +---Abstraction
 |   |       IAuthService.cs
@@ -9618,10 +9409,12 @@ C:.
 |           CommentService.cs
 |           EmailService.cs
 |           PostService.cs
+|           ProfileService.cs
 |           
 +---Settings
 |       GitHubOAuthOptions.cs
 |       GoogleOAuthOptions.cs
+|       MailSettings.cs
 |       
 \---wwwroot
     +---Covers
@@ -9637,11 +9430,9 @@ C:.
     |       
     \---uploads
         +---covers
-        |       802181f446be4aeeaf1d152e5191f4c2.jpg
+        |       b6a139955da9427ab4e03563e81945d1.jpg
         |       
         +---posts
-        |       e54f61cebbe344d6a8428f21d2d2120d.jpg
-        |       
         \---profiles
-                d2b5129fd97147b2ac7cc1e42a1fba64.jpg
+                cbd95ecd198141aab307f3564185e3ba.jpg
 ```

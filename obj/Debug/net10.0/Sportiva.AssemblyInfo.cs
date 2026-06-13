@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Sportiva")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fa426f44c19368b18d788ac6cb248509fec1d4c1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+50cc8aee500f06f719697433fb78acafd2eac843")]
 [assembly: System.Reflection.AssemblyProductAttribute("Sportiva")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Sportiva")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -3,6 +3,5 @@ wwwroot\Posts\4a993bdd7ce6448bb393ece37213090d.jpg
 wwwroot\Posts\513af92b9b604b55a9767f8b2706ac4a.jpg
 wwwroot\Posts\bb96732141c54bb0b41aef53e41c3572.png
 wwwroot\Profiles\089b2814c6aa4deda1b1b5419b0dad69.jpg
-wwwroot\uploads\covers\802181f446be4aeeaf1d152e5191f4c2.jpg
-wwwroot\uploads\posts\e54f61cebbe344d6a8428f21d2d2120d.jpg
-wwwroot\uploads\profiles\d2b5129fd97147b2ac7cc1e42a1fba64.jpg
+wwwroot\uploads\covers\b6a139955da9427ab4e03563e81945d1.jpg
+wwwroot\uploads\profiles\cbd95ecd198141aab307f3564185e3ba.jpg

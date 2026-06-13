@@ -1,26 +1,21 @@
-using Sportiva.Contracts.Common;
 using Sportiva.Contracts.Subscriptions;
 
 namespace Sportiva.Services;
 
 public interface ISubscriptionPlanService
 {
-    // ── Queries ────────────────────────────────────────────────────
+    Task<Result<IReadOnlyList<SubscriptionPlanResponse>>> GetPlansAsync(
+        CancellationToken ct = default);
+
     Task<Result<SubscriptionPlanResponse>> GetPlanAsync(
         string planId, CancellationToken ct = default);
 
-    Task<PaginatedList<SubscriptionPlanResponse>> GetPlansAsync(
-        RequestFilters filters, CancellationToken ct = default);
+    Task<Result<SubscriptionPlanResponse>> CreatePlanAsync(
+        CreateClubSubscriptionRequest request, CancellationToken ct = default);
 
-    // ── Admin CRUD ─────────────────────────────────────────────────
-    //Task<Result<SubscriptionPlanResponse>> CreatePlanAsync(
-    //    CreateSubscriptionPlanRequest request,
-    //    CancellationToken ct = default);
+    Task<Result<SubscriptionPlanResponse>> UpdatePlanAsync(
+        string planId, CreateClubSubscriptionRequest request, CancellationToken ct = default);
 
-    //Task<Result<SubscriptionPlanResponse>> UpdatePlanAsync(
-    //    string planId, UpdateSubscriptionPlanRequest request,
-    //CancellationToken ct = default);
-
-    Task<Result> DeletePlanAsync(
+    Task<Result> ArchivePlanAsync(
         string planId, CancellationToken ct = default);
 }
