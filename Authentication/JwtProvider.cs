@@ -11,7 +11,6 @@ public class JwtProvider(IOptions<JwtOptions> options) : IJwtProvider
             new(JwtRegisteredClaimNames.Email, user.Email!),
             new(JwtRegisteredClaimNames.GivenName, user.FirstName),
             new(JwtRegisteredClaimNames.FamilyName, user.LastName),
-            new(JwtRegisteredClaimNames.Nickname , user.FullName),
             new(JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString()),
             new(nameof(roles), JsonSerializer.Serialize(roles), JsonClaimValueTypes.JsonArray),
             new(nameof(permissions), JsonSerializer.Serialize(permissions), JsonClaimValueTypes.JsonArray)
@@ -31,7 +30,6 @@ public class JwtProvider(IOptions<JwtOptions> options) : IJwtProvider
 
         return (token: new JwtSecurityTokenHandler().WriteToken(token), expiresIn: _options.ExpiryMinutes * 60);
     }
-
 
     public string? ValidateToken(string token, bool validateLifetime = true)
     {
@@ -58,4 +56,5 @@ public class JwtProvider(IOptions<JwtOptions> options) : IJwtProvider
             return null;
         }
     }
+
 }

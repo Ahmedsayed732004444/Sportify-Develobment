@@ -323,7 +323,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId", "BookingDate");
 
-                    b.ToTable("Bookings");
+                    b.ToTable("Bookings", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Club", b =>
@@ -373,7 +373,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("OwnerId");
 
-                    b.ToTable("Clubs");
+                    b.ToTable("Clubs", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.ClubSubscription", b =>
@@ -404,7 +404,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("ClubId", "EndDate");
 
-                    b.ToTable("ClubSubscriptions");
+                    b.ToTable("ClubSubscriptions", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.CommentReaction", b =>
@@ -429,7 +429,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("CommentReactions");
+                    b.ToTable("CommentReactions", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.CommentReply", b =>
@@ -461,7 +461,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("CommentReplies");
+                    b.ToTable("CommentReplies", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Court", b =>
@@ -506,7 +506,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("ClubId");
 
-                    b.ToTable("Courts");
+                    b.ToTable("Courts", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.FriendlyMatch", b =>
@@ -562,7 +562,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("Date", "Status");
 
-                    b.ToTable("FriendlyMatches");
+                    b.ToTable("FriendlyMatches", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.MatchJoinRequest", b =>
@@ -593,7 +593,7 @@ namespace Sportiva.Migrations
                     b.HasIndex("FriendlyMatchId", "PlayerId")
                         .IsUnique();
 
-                    b.ToTable("MatchJoinRequests");
+                    b.ToTable("MatchJoinRequests", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.MembershipUpgrade", b =>
@@ -641,7 +641,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("MembershipUpgrades");
+                    b.ToTable("MembershipUpgrades", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Message", b =>
@@ -676,7 +676,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("SenderId");
 
-                    b.ToTable("Messages");
+                    b.ToTable("Messages", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Notification", b =>
@@ -729,7 +729,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("RecipientId");
 
-                    b.ToTable("Notifications");
+                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.NotificationPreference", b =>
@@ -757,7 +757,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("NotificationPreferences");
+                    b.ToTable("NotificationPreferences", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Post", b =>
@@ -788,7 +788,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Posts");
+                    b.ToTable("Posts", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.PostComment", b =>
@@ -820,7 +820,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("PostComments");
+                    b.ToTable("PostComments", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.PostLike", b =>
@@ -846,7 +846,7 @@ namespace Sportiva.Migrations
                     b.HasIndex("PostId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("PostLikes");
+                    b.ToTable("PostLikes", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.RefreshToken", b =>
@@ -878,7 +878,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshToken");
+                    b.ToTable("RefreshToken", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.ReplyReaction", b =>
@@ -903,7 +903,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ReplyReactions");
+                    b.ToTable("ReplyReactions", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Review", b =>
@@ -945,7 +945,7 @@ namespace Sportiva.Migrations
                     b.HasIndex("UserId", "BookingId")
                         .IsUnique();
 
-                    b.ToTable("Reviews", t =>
+                    b.ToTable("Reviews", null, t =>
                         {
                             t.HasCheckConstraint("CK_Review_Rating", "[Rating] >= 1 AND [Rating] <= 5");
                         });
@@ -979,7 +979,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("ClubSubscriptionId");
 
-                    b.ToTable("SubscriptionPayment");
+                    b.ToTable("SubscriptionPayment", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.SubscriptionPlan", b =>
@@ -1013,7 +1013,7 @@ namespace Sportiva.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SubscriptionPlans");
+                    b.ToTable("SubscriptionPlans", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.TimeSlot", b =>
@@ -1044,7 +1044,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("CourtId", "Day");
 
-                    b.ToTable("TimeSlots");
+                    b.ToTable("TimeSlots", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.Tournament", b =>
@@ -1085,7 +1085,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("OrganizerId");
 
-                    b.ToTable("Tournaments");
+                    b.ToTable("Tournaments", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.TournamentMatch", b =>
@@ -1124,7 +1124,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("WinnerId");
 
-                    b.ToTable("TournamentMatches");
+                    b.ToTable("TournamentMatches", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.TournamentParticipant", b =>
@@ -1149,7 +1149,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TournamentParticipants");
+                    b.ToTable("TournamentParticipants", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.UserFollow", b =>
@@ -1174,7 +1174,7 @@ namespace Sportiva.Migrations
 
                     b.HasIndex("FollowingId");
 
-                    b.ToTable("UserFollows");
+                    b.ToTable("UserFollows", (string)null);
                 });
 
             modelBuilder.Entity("Sportiva.Entities.UserProfile", b =>
@@ -1222,7 +1222,7 @@ namespace Sportiva.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("UserProfiles");
+                    b.ToTable("UserProfiles", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

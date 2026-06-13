@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-﻿namespace SportivaModels
-=======
-using Career_Path;
+using Sportiva;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDependencies(builder.Configuration);
@@ -17,13 +14,14 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 if (app.Environment.IsDevelopment())
->>>>>>> cef9d36 (add new arc)
 {
-    internal class Program
+    app.MapOpenApi();
+    app.UseSwaggerUI(options =>
     {
-        static void Main(string[] args)
-        {
-            Console.WriteLine("Hello, World!");
-        }
-    }
+        options.SwaggerEndpoint("/openapi/v1.json", "careerPath V1");
+    });
 }
+
+app.MapControllers();
+
+app.Run();

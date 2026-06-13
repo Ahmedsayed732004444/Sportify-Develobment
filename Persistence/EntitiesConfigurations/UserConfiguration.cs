@@ -1,4 +1,4 @@
-﻿namespace Sportiva.Persistence.EntitiesConfigurations;
+namespace Sportiva.Persistence.EntitiesConfigurations;
 
 public class UserConfiguration : IEntityTypeConfiguration<ApplicationUser>
 {

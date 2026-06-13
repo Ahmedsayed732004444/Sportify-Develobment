@@ -1,4 +1,4 @@
-﻿namespace Sportiva.Persistence.EntitiesConfigurations; // ✅ تم تصحيح الـ namespace من Sportiva.Abstractions.Consts
+namespace Sportiva.Persistence.EntitiesConfigurations; // ✅ تم تصحيح الـ namespace من Sportiva.Abstractions.Consts
 
 public static class DefaultRoles
 {

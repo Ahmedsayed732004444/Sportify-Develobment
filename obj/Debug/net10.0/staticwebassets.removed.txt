@@ -1,0 +1,3 @@
+C:\Users\AIO\source\repos\SportivaApi\Sportiva\wwwroot\uploads\covers\802181f446be4aeeaf1d152e5191f4c2.jpg
+C:\Users\AIO\source\repos\SportivaApi\Sportiva\wwwroot\uploads\posts\e54f61cebbe344d6a8428f21d2d2120d.jpg
+C:\Users\AIO\source\repos\SportivaApi\Sportiva\wwwroot\uploads\profiles\d2b5129fd97147b2ac7cc1e42a1fba64.jpg
