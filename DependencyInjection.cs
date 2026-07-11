@@ -1,4 +1,4 @@
-﻿using Hangfire;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Sportiva.Services;
 
@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IPostService, PostService>();
         services.AddScoped<ICommentService, CommentService>();
+        services.AddScoped<ISubscriptionPlanService, SubscriptionPlanService>();
         services.AddHttpClient();
         services.AddHttpContextAccessor();
         services.AddBackgroundJobsConfig(configuration);
