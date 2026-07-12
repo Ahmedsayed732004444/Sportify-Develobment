@@ -14,6 +14,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<MatchJoinRequest> MatchJoinRequests { get; set; } = default!;
     public DbSet<ClubSubscription> ClubSubscriptions { get; set; } = default!;
     public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; } = default!;
+    public DbSet<SubscriptionPayment> SubscriptionPayments { get; set; } = default!;
     public DbSet<MembershipUpgrade> MembershipUpgrades { get; set; } = default!;
     public DbSet<Message> Messages { get; set; } = default!;
     public DbSet<Notification> Notifications { get; set; } = default!;

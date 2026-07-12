@@ -6,9 +6,35 @@ public class ClubSubscriptionConfiguration : IEntityTypeConfiguration<ClubSubscr
     {
         builder.HasKey(x => x.Id);
 
-        builder.Ignore(x => x.IsActive); // Computed property
+        builder.Property(x => x.Price)
+               .HasColumnType("decimal(18,2)")
+               .IsRequired();
 
-        builder.HasIndex(x => new { x.ClubId, x.EndDate });
+        builder.Property(x => x.RefundAmount)
+               .HasColumnType("decimal(18,2)");
+
+        builder.Property(x => x.Status)
+               .HasConversion<string>()
+               .HasMaxLength(50)
+               .IsRequired();
+
+        builder.Property(x => x.CreatedAt)
+               .HasDefaultValueSql("GETUTCDATE()");
+
+        // Indexes for common queries
+        builder.HasIndex(x => new { x.UserId, x.ClubId, x.Status });
+        builder.HasIndex(x => new { x.UserId, x.Status });
+        builder.HasIndex(x => new { x.ClubId, x.Status });
+
+        builder.HasOne(x => x.User)
+               .WithMany()
+               .HasForeignKey(x => x.UserId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Club)
+               .WithMany(c => c.Subscriptions)
+               .HasForeignKey(x => x.ClubId)
+               .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.Plan)
                .WithMany(p => p.ClubSubscriptions)
