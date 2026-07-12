@@ -147,13 +147,26 @@ public class SubscriptionPlanService(
                     new Error("SubscriptionPlans.AlreadyExists", "A subscription plan with the same ID already exists", 400));
             }
 
+            if (request.MonthlyPrice < 0)
+            {
+                return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.InvalidPrice);
+            }
+
+            if (request.MaxCourts < 0)
+            {
+                return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.InvalidMaxCourts);
+            }
+
+            var planName = string.IsNullOrWhiteSpace(request.Name) ? $"Plan_{request.PlanId}" : request.Name;
+            var planDescription = string.IsNullOrWhiteSpace(request.Description) ? $"Created for club {request.ClubId}" : request.Description;
+
             var plan = new SubscriptionPlan
             {
                 Id = request.PlanId,
-                Name = $"Plan_{request.PlanId}", // Fallback name since Request DTO does not have a Name property
-                Description = $"Created for club {request.ClubId}",
-                MonthlyPrice = 0.0m, // Placeholder default price
-                MaxCourts = 5,       // Placeholder default max courts
+                Name = planName,
+                Description = planDescription,
+                MonthlyPrice = request.MonthlyPrice,
+                MaxCourts = request.MaxCourts,
                 IsActive = true,
                 ExpiresAt = request.EndDate
             };
@@ -177,8 +190,7 @@ public class SubscriptionPlanService(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while creating subscription plan.");
-            return Result.Failure<SubscriptionPlanResponse>(
-                new Error("SubscriptionPlans.Error", "An error occurred while creating the subscription plan", 500));
+            return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.Error);
         }
     }
 
@@ -190,8 +202,7 @@ public class SubscriptionPlanService(
             // 1. Validation: Null / Empty Fields
             if (string.IsNullOrWhiteSpace(planId))
             {
-                return Result.Failure<SubscriptionPlanResponse>(
-                    new Error("SubscriptionPlans.InvalidId", "Plan ID parameter cannot be empty", 400));
+                return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.PlanNotFound);
             }
 
             if (string.IsNullOrWhiteSpace(request.ClubId))
@@ -215,11 +226,10 @@ public class SubscriptionPlanService(
             }
 
             // 4. Validation: Check if plan exists
-            var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId, ct);
+            var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId && !p.IsDeleted, ct);
             if (plan is null)
             {
-                return Result.Failure<SubscriptionPlanResponse>(
-                    new Error("SubscriptionPlans.NotFound", "The specified subscription plan was not found", 404));
+                return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.PlanNotFound);
             }
 
             // 5. Validation: Check if the club exists and is active
@@ -236,8 +246,28 @@ public class SubscriptionPlanService(
                     new Error("Clubs.Inactive", "The specified club is currently inactive", 400));
             }
 
+            if (request.MonthlyPrice < 0)
+            {
+                return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.InvalidPrice);
+            }
+
+            if (request.MaxCourts < 0)
+            {
+                return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.InvalidMaxCourts);
+            }
+
             // Update parameters
             plan.ExpiresAt = request.EndDate;
+            if (!string.IsNullOrWhiteSpace(request.Name))
+            {
+                plan.Name = request.Name;
+            }
+            if (request.Description != null)
+            {
+                plan.Description = request.Description;
+            }
+            plan.MonthlyPrice = request.MonthlyPrice;
+            plan.MaxCourts = request.MaxCourts;
 
             await _context.SaveChangesAsync(ct);
 
@@ -257,8 +287,7 @@ public class SubscriptionPlanService(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while updating subscription plan {PlanId}.", planId);
-            return Result.Failure<SubscriptionPlanResponse>(
-                new Error("SubscriptionPlans.Error", "An error occurred while updating the subscription plan", 500));
+            return Result.Failure<SubscriptionPlanResponse>(SubscriptionPlanErrors.Error);
         }
     }
 
