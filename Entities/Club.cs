@@ -12,10 +12,11 @@ public class Club
     public string? Email { get; set; }
     public bool IsActive { get; set; }
     public bool IsDeleted { get; set; } = false;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // ✅ الإضافة المطلوبة
 
     public string OwnerId { get; set; } = string.Empty;
-    public ApplicationUser Owner { get; set; } = default!;          // ✅ تم إضافة = default!
+    public ApplicationUser Owner { get; set; } = default!;
 
-    public ICollection<Court> Courts { get; set; } = [];            // ✅ تم تهيئة الـ collection
+    public ICollection<Court> Courts { get; set; } = [];
     public ICollection<ClubSubscription> Subscriptions { get; set; } = [];
 }

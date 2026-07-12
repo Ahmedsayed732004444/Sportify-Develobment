@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IPostService, PostService>();
         services.AddScoped<ICommentService, CommentService>();
+        services.AddScoped<IClubService, ClubService>();
         services.AddHttpClient();
         services.AddHttpContextAccessor();
         services.AddBackgroundJobsConfig(configuration);
