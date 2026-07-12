@@ -11,10 +11,10 @@ public interface ISubscriptionPlanService
         string planId, CancellationToken ct = default);
 
     Task<Result<SubscriptionPlanResponse>> CreatePlanAsync(
-        CreateClubSubscriptionRequest request, CancellationToken ct = default);
+        CreateSubscriptionPlanRequest request, CancellationToken ct = default);
 
     Task<Result<SubscriptionPlanResponse>> UpdatePlanAsync(
-        string planId, CreateClubSubscriptionRequest request, CancellationToken ct = default);
+        string planId, UpdateSubscriptionPlanRequest request, CancellationToken ct = default);
 
     Task<Result> ArchivePlanAsync(
         string planId, CancellationToken ct = default);

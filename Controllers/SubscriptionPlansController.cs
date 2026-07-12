@@ -48,7 +48,7 @@ public class SubscriptionPlansController(ISubscriptionPlanService subscriptionPl
 
     // POST /subscription-plans
     [HttpPost]
-    public async Task<IActionResult> CreatePlan([FromBody] CreateClubSubscriptionRequest request, CancellationToken ct)
+    public async Task<IActionResult> CreatePlan([FromBody] CreateSubscriptionPlanRequest request, CancellationToken ct)
     {
         try
         {
@@ -63,7 +63,7 @@ public class SubscriptionPlansController(ISubscriptionPlanService subscriptionPl
 
     // PUT /subscription-plans/{planId}
     [HttpPut("{planId}")]
-    public async Task<IActionResult> UpdatePlan(string planId, [FromBody] CreateClubSubscriptionRequest request, CancellationToken ct)
+    public async Task<IActionResult> UpdatePlan(string planId, [FromBody] UpdateSubscriptionPlanRequest request, CancellationToken ct)
     {
         try
         {
