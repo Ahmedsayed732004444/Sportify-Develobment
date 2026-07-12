@@ -146,6 +146,7 @@ Contracts/Users/UpdateProfileInfoRequest.cs
 Contracts/Users/UpdateProfilePhotoRequest.cs
 Contracts/Users/UserProfileResponse.cs
 Controllers/AuthController.cs
+Controllers/ClubsController.cs
 Controllers/CommentsController.cs
 Controllers/PostsController.cs
 Controllers/ProfilesController.cs
@@ -186,6 +187,7 @@ Enums/NotificationType.cs
 Enums/PaymentStatus.cs
 Enums/RequestStatus.cs
 Enums/SportType.cs
+Errors/ClubErrors.cs
 Errors/CommentErrors.cs
 Errors/PostErrors.cs
 Errors/ProfileErrors.cs
@@ -216,15 +218,30 @@ Persistence/EntitiesConfigurations/SubscriptionPlanConfiguration.cs
 Persistence/EntitiesConfigurations/TimeSlotConfiguration.cs
 Persistence/EntitiesConfigurations/UserConfiguration.cs
 Persistence/EntitiesConfigurations/UserProfileConfiguration.cs
+Persistence/EntitiesConfigurations/UserRoleConfiguration.cs
 Program.cs
 Properties/launchSettings.json
 README.md
 repomix.config.json
 Services/Abstraction/IAuthService.cs
+Services/Abstraction/IBookingService.cs
+Services/Abstraction/IClubService.cs
+Services/Abstraction/IClubSubscriptionService.cs
 Services/Abstraction/ICommentService.cs
+Services/Abstraction/ICourtService.cs
+Services/Abstraction/IFriendlyMatchService.cs
+Services/Abstraction/IMatchJoinRequestService.cs
+Services/Abstraction/IMembershipUpgradeService.cs
+Services/Abstraction/IMessagingService.cs
+Services/Abstraction/INotificationService.cs
 Services/Abstraction/IPostService.cs
 Services/Abstraction/IProfileService.cs
+Services/Abstraction/IReviewService.cs
+Services/Abstraction/ISubscriptionPlanService.cs
+Services/Abstraction/ITimeSlotService.cs
+Services/Abstraction/ITournamentService.cs
 Services/Implementation/AuthService.cs
+Services/Implementation/ClubService.cs
 Services/Implementation/CommentService.cs
 Services/Implementation/EmailService.cs
 Services/Implementation/PostService.cs
@@ -238,6 +255,608 @@ tree.txt
 
 # Files
 
+## File: Controllers/ClubsController.cs
+```csharp
+using Sportiva.Contracts.Clubs;
+using Sportiva.Contracts.Common;
+using Sportiva.Extensions;
+using Sportiva.Services;
+
+namespace Sportiva.Controllers;
+
+[Route("clubs")]
+[ApiController]
+[Authorize]
+public class ClubsController(IClubService clubService) : ControllerBase
+{
+    private readonly IClubService _clubService = clubService;
+    //for all users
+    // GET /clubs
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetClubs([FromQuery] RequestFilters filters, CancellationToken ct)
+    {
+        var result = await _clubService.GetClubsAsync(User.GetUserId(), filters, ct);
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+    //for owners
+    // GET /clubs/me
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMyClubs([FromQuery] RequestFilters filters, CancellationToken ct)
+    {
+        var result = await _clubService.GetMyClubsAsync(User.GetUserId()!, filters, ct);
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+    //for all users
+    // GET /clubs/{clubId}
+    [HttpGet("{clubId}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetClub(string clubId, CancellationToken ct)
+    {
+        var result = await _clubService.GetClubAsync(clubId, User.GetUserId(), ct);
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+    //for Admins only
+    // POST /clubs
+    [HttpPost]
+    public async Task<IActionResult> CreateClub([FromForm] CreateClubRequest request, CancellationToken ct)
+    {
+        var result = await _clubService.CreateClubAsync(User.GetUserId()!, request, ct);
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+    //for Admins only
+    // PUT /clubs/{clubId}
+    [HttpPut("{clubId}")]
+    public async Task<IActionResult> UpdateClub(string clubId, [FromForm] UpdateClubRequest request, CancellationToken ct)
+    {
+        var result = await _clubService.UpdateClubAsync(User.GetUserId()!, clubId, request, ct);
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+    //for Admins only
+    // DELETE /clubs/{clubId}
+    [HttpDelete("{clubId}")]
+    public async Task<IActionResult> DeleteClub(string clubId, CancellationToken ct)
+    {
+        var result = await _clubService.DeleteClubAsync(User.GetUserId()!, clubId, ct);
+        return result.IsSuccess ? NoContent() : result.ToProblem();
+    }
+    // for Admins only
+    // PATCH /clubs/{clubId}/status
+    [HttpPatch("{clubId}/status")]
+    public async Task<IActionResult> ToggleClubStatus(string clubId, CancellationToken ct)
+    {
+        var result = await _clubService.ToggleClubStatusAsync(User.GetUserId()!, clubId, ct);
+        return result.IsSuccess ? NoContent() : result.ToProblem();
+    }
+}
+```
+
+## File: Errors/ClubErrors.cs
+```csharp
+namespace Sportiva.Errors;
+
+public record ClubErrors
+{
+    public static readonly Error Error =
+        new("Clubs.Error", "An error occurred while processing the club", StatusCodes.Status500InternalServerError);
+
+    public static readonly Error ClubNotFound =
+        new("Clubs.NotFound", "The specified club was not found", StatusCodes.Status404NotFound);
+
+    public static readonly Error Unauthorized =
+        new("Clubs.Unauthorized", "You are not authorized to manage this club", StatusCodes.Status403Forbidden);
+}
+```
+
+## File: Persistence/EntitiesConfigurations/UserRoleConfiguration.cs
+```csharp
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Sportiva.Persistence.EntitiesConfigurations;
+
+public class UserRoleConfiguration : IEntityTypeConfiguration<IdentityUserRole<string>>
+{
+    public void Configure(EntityTypeBuilder<IdentityUserRole<string>> builder)
+    {
+        builder.HasData(new IdentityUserRole<string>
+        {
+            UserId = DefaultUsers.Admin.Id,
+            RoleId = DefaultRoles.Admin.Id
+        });
+    }
+}
+```
+
+## File: Services/Implementation/ClubService.cs
+```csharp
+using Sportiva.Contracts.Clubs;
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Shared.Summaries;
+using Sportiva.Extensions;
+
+namespace Sportiva.Services;
+
+public class ClubService(
+    ApplicationDbContext context,
+    ILogger<ClubService> logger,
+    IWebHostEnvironment env,
+    IHttpContextAccessor accessor) : IClubService
+{
+    private readonly ApplicationDbContext _context = context;
+    private readonly ILogger<ClubService> _logger = logger;
+    private readonly IWebHostEnvironment _env = env;
+    private readonly IHttpContextAccessor _accessor = accessor;
+
+    private static readonly string[] AllowedClubSortColumns = ["Name", "CreatedAt"];
+    private const string LogoLocation = "uploads/clubs";
+
+    // ════════════════════════════════════════════════════════════════
+    //  Get Single Club
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result<ClubResponse>> GetClubAsync(
+        string clubId, string? currentUserId = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var club = await _context.Clubs
+                .Where(c => c.Id == clubId && !c.IsDeleted)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    c.LogoUrl,
+                    c.Governorate,
+                    c.City,
+                    c.Address,
+                    c.PhoneNumber,
+                    c.Email,
+                    c.IsActive,
+                    c.OwnerId,
+                    OwnerFullName = c.Owner.FullName,
+                    OwnerPicture = c.Owner.UserProfile == null ? null : c.Owner.UserProfile.ProfilePictureUrl,
+                    CourtsCount = c.Courts.Count(x => !x.IsDeleted),
+                    c.CreatedAt,
+                    ActiveSubscription = c.Subscriptions
+                        .Where(s => !s.IsDeleted &&
+                                    s.StartDate <= DateTime.UtcNow &&
+                                    s.EndDate >= DateTime.UtcNow)
+                        .Select(s => new
+                        {
+                            s.Id,
+                            s.StartDate,
+                            s.EndDate,
+                            s.PlanId,
+                            PlanName = s.Plan.Name,
+                            PlanPrice = s.Plan.MonthlyPrice,
+                            PlanMaxCourts = s.Plan.MaxCourts
+                        })
+                        .FirstOrDefault()
+                })
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ct);
+
+            if (club is null)
+                return Result.Failure<ClubResponse>(ClubErrors.ClubNotFound);
+
+            var reviewRatings = await _context.Reviews
+                .Where(r => r.Court.ClubId == clubId && !r.IsDeleted)
+                .Select(r => r.Rating)
+                .ToListAsync(ct);
+
+            var isOwner = club.OwnerId == currentUserId;
+
+            var response = new ClubResponse(
+                club.Id,
+                club.Name,
+                club.LogoUrl,
+                club.Governorate,
+                club.City,
+                club.Address,
+                club.PhoneNumber,
+                club.Email,
+                club.IsActive,
+                new UserSummary(club.OwnerId, club.OwnerFullName, club.OwnerPicture),
+                IsOwner: isOwner,
+                CanManageCourts: isOwner,
+                CourtsCount: club.CourtsCount,
+                ReviewsCount: reviewRatings.Count,
+                AverageRating: reviewRatings.Count == 0 ? 0 : Math.Round(reviewRatings.Average(), 1),
+                ActiveSubscription: club.ActiveSubscription is null
+                    ? null
+                    : new ClubSubscriptionSummary(
+                        club.ActiveSubscription.Id,
+                        new SubscriptionPlanSummary(
+                            club.ActiveSubscription.PlanId,
+                            club.ActiveSubscription.PlanName,
+                            club.ActiveSubscription.PlanPrice,
+                            club.ActiveSubscription.PlanMaxCourts),
+                        club.ActiveSubscription.StartDate,
+                        club.ActiveSubscription.EndDate,
+                        IsActive: true),
+                club.CreatedAt
+            );
+
+            return Result.Success(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while retrieving club {ClubId}", clubId);
+            return Result.Failure<ClubResponse>(ClubErrors.Error);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Browse Clubs (public discovery — active only)
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result<PaginatedList<ClubResponse>>> GetClubsAsync(
+    string? currentUserId, RequestFilters filters, CancellationToken ct = default)
+    {
+        try
+        {
+            var reviewStats = _context.Reviews
+                .Where(r => !r.IsDeleted)
+                .GroupBy(r => r.Court.ClubId)
+                .Select(g => new
+                {
+                    ClubId = g.Key,
+                    Count = (int?)g.Count(),
+                    Average = (double?)g.Average(r => (double)r.Rating)
+                });
+
+            var clubsQuery = _context.Clubs
+                .Where(c => !c.IsDeleted && c.IsActive)
+                .ApplyFilters(filters,
+                    searchPredicate: c =>
+                        (c.Name != null && c.Name.Contains(filters.SearchValue!)) ||
+                        (c.City != null && c.City.Contains(filters.SearchValue!)) ||
+                        (c.Governorate != null && c.Governorate.Contains(filters.SearchValue!)),
+                    allowedSortColumns: AllowedClubSortColumns);
+
+            var query =
+                from c in clubsQuery
+                join rs in reviewStats on c.Id equals rs.ClubId into ratingsGroup
+                from rs in ratingsGroup.DefaultIfEmpty()
+                select new ClubResponse(
+                    c.Id,
+                    c.Name,
+                    c.LogoUrl,
+                    c.Governorate,
+                    c.City,
+                    c.Address,
+                    c.PhoneNumber,
+                    c.Email,
+                    c.IsActive,
+                    new UserSummary(
+                        c.OwnerId,
+                        c.Owner.FullName,
+                        c.Owner.UserProfile == null ? null : c.Owner.UserProfile.ProfilePictureUrl),
+                    IsOwner: c.OwnerId == currentUserId,
+                    CanManageCourts: c.OwnerId == currentUserId,
+                    CourtsCount: c.Courts.Count(x => !x.IsDeleted),
+                    ReviewsCount: rs.Count ?? 0,
+                    AverageRating: rs.Average ?? 0,
+                    ActiveSubscription: c.Subscriptions
+                        .Where(s => !s.IsDeleted &&
+                                    s.StartDate <= DateTime.UtcNow &&
+                                    s.EndDate >= DateTime.UtcNow)
+                        .Select(s => new ClubSubscriptionSummary(
+                            s.Id,
+                            new SubscriptionPlanSummary(s.PlanId, s.Plan.Name, s.Plan.MonthlyPrice, s.Plan.MaxCourts),
+                            s.StartDate,
+                            s.EndDate,
+                            true))
+                        .FirstOrDefault(),
+                    c.CreatedAt
+                );
+
+            var result = await query.AsNoTracking().ToPaginatedListAsync(filters, ct);
+            return Result.Success(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while retrieving clubs");
+            return Result.Failure<PaginatedList<ClubResponse>>(ClubErrors.Error);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Create Club
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result<ClubResponse>> CreateClubAsync(
+        string ownerId, CreateClubRequest request, CancellationToken ct = default)
+    {
+        try
+        {
+            var owner = await _context.Users
+                .Where(u => u.Id == ownerId)
+                .Select(u => new
+                {
+                    u.FullName,
+                    ProfilePictureUrl = u.UserProfile == null ? null : u.UserProfile.ProfilePictureUrl
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (owner is null)
+                return Result.Failure<ClubResponse>(UserErrors.UserNotFound);
+
+            var club = new Club
+            {
+                OwnerId = ownerId,
+                Name = request.Name,
+                Governorate = request.Governorate,
+                City = request.City,
+                Address = request.Address,
+                PhoneNumber = request.PhoneNumber,
+                Email = request.Email,
+                IsActive = true
+            };
+
+            if (request.Logo is not null)
+                club.LogoUrl = await FileHelper.UploadeFileAsync(request.Logo, LogoLocation, _env, _accessor);
+
+            await _context.Clubs.AddAsync(club, ct);
+            await _context.SaveChangesAsync(ct);
+
+            var response = new ClubResponse(
+                club.Id,
+                club.Name,
+                club.LogoUrl,
+                club.Governorate,
+                club.City,
+                club.Address,
+                club.PhoneNumber,
+                club.Email,
+                club.IsActive,
+                new UserSummary(ownerId, owner.FullName, owner.ProfilePictureUrl),
+                IsOwner: true,
+                CanManageCourts: true,
+                CourtsCount: 0,
+                ReviewsCount: 0,
+                AverageRating: 0,
+                ActiveSubscription: null,
+                club.CreatedAt
+            );
+
+            return Result.Success(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while creating club for owner {OwnerId}", ownerId);
+            return Result.Failure<ClubResponse>(ClubErrors.Error);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Update Club
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result<ClubResponse>> UpdateClubAsync(
+        string userId, string clubId, UpdateClubRequest request, CancellationToken ct = default)
+    {
+        try
+        {
+            var club = await _context.Clubs
+                .Include(c => c.Owner)
+                    .ThenInclude(o => o.UserProfile)
+                .FirstOrDefaultAsync(c => c.Id == clubId && !c.IsDeleted, ct);
+
+            if (club is null)
+                return Result.Failure<ClubResponse>(ClubErrors.ClubNotFound);
+
+            if (club.OwnerId != userId)
+                return Result.Failure<ClubResponse>(ClubErrors.Unauthorized);
+
+            if (request.Name is not null) club.Name = request.Name;
+            if (request.Governorate is not null) club.Governorate = request.Governorate;
+            if (request.City is not null) club.City = request.City;
+            if (request.Address is not null) club.Address = request.Address;
+            if (request.PhoneNumber is not null) club.PhoneNumber = request.PhoneNumber;
+            if (request.Email is not null) club.Email = request.Email;
+            club.IsActive = request.IsActive;
+
+            if (request.Logo is not null)
+            {
+                var oldLogo = club.LogoUrl;
+                club.LogoUrl = await FileHelper.UploadeFileAsync(request.Logo, LogoLocation, _env, _accessor);
+
+                if (!string.IsNullOrEmpty(oldLogo))
+                    FileHelper.DeleteFile(oldLogo, LogoLocation, _env);
+            }
+
+            await _context.SaveChangesAsync(ct);
+
+            var courtsCount = await _context.Courts
+                .CountAsync(x => x.ClubId == clubId && !x.IsDeleted, ct);
+
+            var reviewRatings = await _context.Reviews
+                .Where(r => r.Court.ClubId == clubId && !r.IsDeleted)
+                .Select(r => r.Rating)
+                .ToListAsync(ct);
+
+            var activeSub = await _context.ClubSubscriptions
+                .Where(s => s.ClubId == clubId && !s.IsDeleted &&
+                            s.StartDate <= DateTime.UtcNow && s.EndDate >= DateTime.UtcNow)
+                .Select(s => new ClubSubscriptionSummary(
+                    s.Id,
+                    new SubscriptionPlanSummary(s.PlanId, s.Plan.Name, s.Plan.MonthlyPrice, s.Plan.MaxCourts),
+                    s.StartDate,
+                    s.EndDate,
+                    true))
+                .FirstOrDefaultAsync(ct);
+
+            var response = new ClubResponse(
+                club.Id,
+                club.Name,
+                club.LogoUrl,
+                club.Governorate,
+                club.City,
+                club.Address,
+                club.PhoneNumber,
+                club.Email,
+                club.IsActive,
+                new UserSummary(
+                    club.OwnerId,
+                    club.Owner.FullName,
+                    club.Owner.UserProfile == null ? null : club.Owner.UserProfile.ProfilePictureUrl),
+                IsOwner: true,
+                CanManageCourts: true,
+                CourtsCount: courtsCount,
+                ReviewsCount: reviewRatings.Count,
+                AverageRating: reviewRatings.Count == 0 ? 0 : Math.Round(reviewRatings.Average(), 1),
+                ActiveSubscription: activeSub,
+                club.CreatedAt
+            );
+
+            return Result.Success(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while updating club {ClubId} for user {UserId}", clubId, userId);
+            return Result.Failure<ClubResponse>(ClubErrors.Error);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Delete Club (soft delete)
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result> DeleteClubAsync(
+        string userId, string clubId, CancellationToken ct = default)
+    {
+        try
+        {
+            var club = await _context.Clubs
+                .FirstOrDefaultAsync(c => c.Id == clubId && !c.IsDeleted, ct);
+
+            if (club is null)
+                return Result.Failure(ClubErrors.ClubNotFound);
+
+            if (club.OwnerId != userId)
+                return Result.Failure(ClubErrors.Unauthorized);
+
+            club.IsDeleted = true;
+            club.IsActive = false;
+
+            await _context.SaveChangesAsync(ct);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while deleting club {ClubId} for user {UserId}", clubId, userId);
+            return Result.Failure(ClubErrors.Error);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Toggle Active/Inactive
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result> ToggleClubStatusAsync(
+        string userId, string clubId, CancellationToken ct = default)
+    {
+        try
+        {
+            var club = await _context.Clubs
+                .FirstOrDefaultAsync(c => c.Id == clubId && !c.IsDeleted, ct);
+
+            if (club is null)
+                return Result.Failure(ClubErrors.ClubNotFound);
+
+            if (club.OwnerId != userId)
+                return Result.Failure(ClubErrors.Unauthorized);
+
+            club.IsActive = !club.IsActive;
+            await _context.SaveChangesAsync(ct);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while toggling status for club {ClubId} by user {UserId}", clubId, userId);
+            return Result.Failure(ClubErrors.Error);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  My Clubs (owner dashboard — includes inactive)
+    // ════════════════════════════════════════════════════════════════
+
+    public async Task<Result<PaginatedList<ClubResponse>>> GetMyClubsAsync(
+    string userId, RequestFilters filters, CancellationToken ct = default)
+    {
+        try
+        {
+            var reviewStats = _context.Reviews
+                .Where(r => !r.IsDeleted)
+                .GroupBy(r => r.Court.ClubId)
+                .Select(g => new
+                {
+                    ClubId = g.Key,
+                    Count = (int?)g.Count(),
+                    Average = (double?)g.Average(r => (double)r.Rating)
+                });
+
+            var clubsQuery = _context.Clubs
+                .Where(c => c.OwnerId == userId && !c.IsDeleted)
+                .ApplyFilters(filters,
+                    searchPredicate: c => c.Name != null && c.Name.Contains(filters.SearchValue!),
+                    allowedSortColumns: AllowedClubSortColumns);
+
+            var query =
+                from c in clubsQuery
+                join rs in reviewStats on c.Id equals rs.ClubId into ratingsGroup
+                from rs in ratingsGroup.DefaultIfEmpty()
+                select new ClubResponse(
+                    c.Id,
+                    c.Name,
+                    c.LogoUrl,
+                    c.Governorate,
+                    c.City,
+                    c.Address,
+                    c.PhoneNumber,
+                    c.Email,
+                    c.IsActive,
+                    new UserSummary(
+                        c.OwnerId,
+                        c.Owner.FullName,
+                        c.Owner.UserProfile == null ? null : c.Owner.UserProfile.ProfilePictureUrl),
+                    IsOwner: true,
+                    CanManageCourts: true,
+                    CourtsCount: c.Courts.Count(x => !x.IsDeleted),
+                    ReviewsCount: rs.Count ?? 0,
+                    AverageRating: rs.Average ?? 0,
+                    ActiveSubscription: c.Subscriptions
+                        .Where(s => !s.IsDeleted &&
+                                    s.StartDate <= DateTime.UtcNow &&
+                                    s.EndDate >= DateTime.UtcNow)
+                        .Select(s => new ClubSubscriptionSummary(
+                            s.Id,
+                            new SubscriptionPlanSummary(s.PlanId, s.Plan.Name, s.Plan.MonthlyPrice, s.Plan.MaxCourts),
+                            s.StartDate,
+                            s.EndDate,
+                            true))
+                        .FirstOrDefault(),
+                    c.CreatedAt
+                );
+
+            var result = await query.AsNoTracking().ToPaginatedListAsync(filters, ct);
+            return Result.Success(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while retrieving clubs owned by user {UserId}", userId);
+            return Result.Failure<PaginatedList<ClubResponse>>(ClubErrors.Error);
+        }
+    }
+}
+```
+
 ## File: Abstractions/Consts/DefaultRoles.cs
 ```csharp
 namespace Sportiva.Abstractions.Consts;
@@ -250,9 +869,9 @@ public static class DefaultRoles
         public const string Id = "0191a4b6-c4fc-752e-9d95-40b5e4e68054";
         public const string ConcurrencyStamp = "0191a4b6-c4fc-752e-9d95-40b631d1866d";
     }
-    public partial class Company
+    public partial class Owner
     {
-        public const string Name = nameof(Company);
+        public const string Name = nameof(Owner);
         public const string Id = "647f9fdc-4677-473b-a656-4deb7000478c";
         public const string ConcurrencyStamp = "fb32d7a4-c53f-421d-bbd3-2b00dd57fa1d";
     }
@@ -448,79 +1067,6 @@ public static class ResultExtensions
 
         return new ObjectResult(problemDetails);
     }
-}
-```
-
-## File: appsettings.json
-```json
-{
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
-
-  "AllowedHosts": "*",
-
-  "ConnectionStrings": {
-    "DefaultConnection": "Data Source=.\\Ahmed1;Initial Catalog=ssss;Integrated Security=True;Encrypt=True;Trust Server Certificate=True",
-    "HangfireConnection": "Data Source=.\\Ahmed1;Initial Catalog=ssss;Integrated Security=True;Encrypt=True;Trust Server Certificate=True"
-  },
-
-  "Jwt": {
-    "Key": "jjkjfhhhjfbghbdfgbdfgbhbdfhgbdhbjvhbk",
-    "Issuer": "SurveyBasketApp",
-    "Audience": "SurveyBasketApp users",
-    "ExpiryMinutes": 30
-  },
-
-  "AppSettings": {
-    "FrontendOrigin": "https://front-end-project-bay-seven.vercel.app"
-  },
-
-  "Authentication": {
-    "Google": {
-      "ClientId": "1018203917478-m61lfh6qdo2uv1mqf59qc2osue4el2l9.apps.googleusercontent.com",
-      "ClientSecret": "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",
-      "RedirectUri": "/signin-google",
-      "Scopes": [ "openid", "profile", "email" ]
-    },
-    "GitHub": {
-      "ClientId": "Ov23liZQDMerjBEdPB71",
-      "ClientSecret": "0ac4f14d1a9b4d4b9e96194763bc53da11b5de0c",
-      "RedirectUri": "/signin-github",
-      "Scopes": [ "user:email", "read:user" ]
-    }
-  },
-
-  "MailSettings": {
-    "Mail": "sayed732004444@gmail.com",
-    "DisplayName": "Ahmed Elsayed",
-    "Password": "yxva ikie aqnm obix",
-    "Host": "smtp.gmail.com",
-    "Port": 587
-  },
-
-  "AllowedOrigins": [
-    "https://front-end-project-bay-seven.vercel.app",
-    "https://careerpathfinal.runasp.net",
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://localhost:7283",
-    "http://localhost:5250"
-  ],
-
-  "AdzunaApi": {
-    "BaseUrl": "https://api.adzuna.com/v1/api",
-    "AppId": "0c2dc806",
-    "AppKey": "9c221969b8d228069a84d16ac3b204ce"
-  },
-
-  "HangfireSettings": {
-    "Username": "admin",
-    "Password": "admin"
-  }
 }
 ```
 
@@ -952,37 +1498,6 @@ public record ClubSubscriptionSummary(
 );
 ```
 
-## File: Contracts/Clubs/CreateClubRequest.cs
-```csharp
-namespace Sportiva.Contracts.Clubs;
-
-public record CreateClubRequest(
-    string? Name,
-    IFormFile? Logo,
-    string? Governorate,
-    string? City,
-    string? Address,
-    string? PhoneNumber,
-    string? Email
-);
-```
-
-## File: Contracts/Clubs/UpdateClubRequest.cs
-```csharp
-namespace Sportiva.Contracts.Clubs;
-
-public record UpdateClubRequest(
-    string? Name,
-    IFormFile? Logo,
-    string? Governorate,
-    string? City,
-    string? Address,
-    string? PhoneNumber,
-    string? Email,
-    bool IsActive
-);
-```
-
 ## File: Contracts/Common/RequestFilters.cs
 ```csharp
 namespace Sportiva.Contracts.Common;
@@ -1037,40 +1552,6 @@ public record CourtResponse(
     double AverageRating,
 
     DateTime CreatedAt
-);
-```
-
-## File: Contracts/Courts/CreateCourtRequest.cs
-```csharp
-using Sportiva.Contracts.Shared.Enums;
-
-namespace Sportiva.Contracts.Courts;
-
-public record CreateCourtRequest(
-    string ClubId,
-    string? Name,
-    string? Description,
-    IFormFile? Image,
-    SportTypeDto SportType,
-    int MaxCapacity,
-    decimal PricePerHour
-);
-```
-
-## File: Contracts/Courts/UpdateCourtRequest.cs
-```csharp
-using Sportiva.Contracts.Shared.Enums;
-
-namespace Sportiva.Contracts.Courts;
-
-public record UpdateCourtRequest(
-    string? Name,
-    string? Description,
-    IFormFile? Image,
-    SportTypeDto SportType,
-    int MaxCapacity,
-    decimal PricePerHour,
-    bool IsActive
 );
 ```
 
@@ -2658,11 +3139,12 @@ public class Club
     public string? Email { get; set; }
     public bool IsActive { get; set; }
     public bool IsDeleted { get; set; } = false;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // ✅ الإضافة المطلوبة
 
     public string OwnerId { get; set; } = string.Empty;
-    public ApplicationUser Owner { get; set; } = default!;          // ✅ تم إضافة = default!
+    public ApplicationUser Owner { get; set; } = default!;
 
-    public ICollection<Court> Courts { get; set; } = [];            // ✅ تم تهيئة الـ collection
+    public ICollection<Court> Courts { get; set; } = [];
     public ICollection<ClubSubscription> Subscriptions { get; set; } = [];
 }
 ```
@@ -3058,13 +3540,15 @@ namespace Sportiva.Entities;
 public class SubscriptionPlan
 {
     public string Id { get; set; } = Guid.CreateVersion7().ToString();
-    public string Name { get; set; } = string.Empty;        // Basic, Pro, Enterprise
+    public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal MonthlyPrice { get; set; }
     public int MaxCourts { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsDeleted { get; set; } = false;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // ✅ الإضافة
+
     public ICollection<ClubSubscription> ClubSubscriptions { get; set; } = [];
 }
 ```
@@ -4200,7 +4684,7 @@ namespace Sportiva.Helpers
 {
     public class FileHelper
     {
-        public async static Task<string> UploadeFileAsync(IFormFile file, string location, IWebHostEnvironment env, IHttpContextAccessor accessor)
+        public async static Task<string?> UploadeFileAsync(IFormFile file, string location, IWebHostEnvironment env, IHttpContextAccessor accessor)
         {
             if (file is null)
                 return null;
@@ -5187,6 +5671,39 @@ public interface ICommentService
 
     Task<Result<ToggleReplyLikeResponse>> ToggleReplyLikeAsync(
         string userId, string replyId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IMatchJoinRequestService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Matches;
+using Sportiva.Enums;
+
+namespace Sportiva.Services;
+
+public interface IMatchJoinRequestService
+{
+    Task<Result<MatchJoinRequestResponse>> RequestToJoinAsync(
+        string userId, string matchId, JoinMatchRequest request, CancellationToken ct = default);
+
+    Task<Result<MatchJoinRequestResponse>> GetJoinRequestAsync(
+        string userId, string matchId, string requestId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<MatchJoinRequestResponse>>> GetMatchJoinRequestsAsync(
+        string userId, string matchId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<MatchJoinRequestResponse>>> GetMyJoinRequestsAsync(
+        string userId, RequestFilters filters, JoinRequestStatus? status = null, CancellationToken ct = default);
+
+    Task<Result> AcceptJoinRequestAsync(
+        string userId, string matchId, string requestId, CancellationToken ct = default);
+
+    Task<Result> RejectJoinRequestAsync(
+        string userId, string matchId, string requestId, CancellationToken ct = default);
+
+    Task<Result> WithdrawJoinRequestAsync(
+        string userId, string matchId, string requestId, CancellationToken ct = default);
 }
 ```
 
@@ -8013,6 +8530,79 @@ obj/
 wwwroot/uploads/
 ```
 
+## File: appsettings.json
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+
+  "AllowedHosts": "*",
+
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=.\\Ahmed1;Initial Catalog=ssss;Integrated Security=True;Encrypt=True;Trust Server Certificate=True",
+    "HangfireConnection": "Data Source=.\\Ahmed1;Initial Catalog=ssss;Integrated Security=True;Encrypt=True;Trust Server Certificate=True"
+  },
+
+  "Jwt": {
+    "Key": "jjkjfhhhjfbghbdfgbdfgbhbdfhgbdhbjvhbk",
+    "Issuer": "SurveyBasketApp",
+    "Audience": "SurveyBasketApp users",
+    "ExpiryMinutes": 30
+  },
+
+  "AppSettings": {
+    "FrontendOrigin": "https://front-end-project-bay-seven.vercel.app"
+  },
+
+  "Authentication": {
+    "Google": {
+      "ClientId": "1018203917478-m61lfh6qdo2uv1mqf59qc2osue4el2l9.apps.googleusercontent.com",
+      "ClientSecret": "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",
+      "RedirectUri": "/signin-google",
+      "Scopes": [ "openid", "profile", "email" ]
+    },
+    "GitHub": {
+      "ClientId": "Ov23liZQDMerjBEdPB71",
+      "ClientSecret": "0ac4f14d1a9b4d4b9e96194763bc53da11b5de0c",
+      "RedirectUri": "/signin-github",
+      "Scopes": [ "user:email", "read:user" ]
+    }
+  },
+
+  "MailSettings": {
+    "Mail": "sayed732004444@gmail.com",
+    "DisplayName": "Ahmed Elsayed",
+    "Password": "yxva ikie aqnm obix",
+    "Host": "smtp.gmail.com",
+    "Port": 587
+  },
+
+  "AllowedOrigins": [
+    "https://front-end-project-bay-seven.vercel.app",
+    "https://careerpathfinal.runasp.net",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://localhost:7283",
+    "http://localhost:5250"
+  ],
+
+  "AdzunaApi": {
+    "BaseUrl": "https://api.adzuna.com/v1/api",
+    "AppId": "0c2dc806",
+    "AppKey": "9c221969b8d228069a84d16ac3b204ce"
+  },
+
+  "HangfireSettings": {
+    "Username": "admin",
+    "Password": "admin"
+  }
+}
+```
+
 ## File: Authentication/JwtProvider.cs
 ```csharp
 namespace Sportiva.Authentication;
@@ -8077,6 +8667,71 @@ public class JwtProvider(IOptions<JwtOptions> options) : IJwtProvider
 }
 ```
 
+## File: Contracts/Clubs/CreateClubRequest.cs
+```csharp
+namespace Sportiva.Contracts.Clubs;
+
+public record CreateClubRequest(
+    string? Name,
+    IFormFile? Logo,
+    string? Governorate,
+    string? City,
+    string? Address,
+    string? PhoneNumber,
+    string? Email
+);
+```
+
+## File: Contracts/Clubs/UpdateClubRequest.cs
+```csharp
+namespace Sportiva.Contracts.Clubs;
+
+public record UpdateClubRequest(
+    string? Name,
+    IFormFile? Logo,
+    string? Governorate,
+    string? City,
+    string? Address,
+    string? PhoneNumber,
+    string? Email,
+    bool IsActive
+);
+```
+
+## File: Contracts/Courts/CreateCourtRequest.cs
+```csharp
+using Sportiva.Contracts.Shared.Enums;
+
+namespace Sportiva.Contracts.Courts;
+
+public record CreateCourtRequest(
+    string ClubId,
+    string? Name,
+    string? Description,
+    IFormFile? Image,
+    SportTypeDto SportType,
+    int MaxCapacity,
+    decimal PricePerHour
+);
+```
+
+## File: Contracts/Courts/UpdateCourtRequest.cs
+```csharp
+using Sportiva.Contracts.Shared.Enums;
+
+namespace Sportiva.Contracts.Courts;
+
+public record UpdateCourtRequest(
+    string? Name,
+    string? Description,
+    IFormFile? Image,
+    SportTypeDto SportType,
+    int MaxCapacity,
+    decimal PricePerHour,
+    bool IsActive
+);
+```
+
 ## File: DependencyInjection.cs
 ```csharp
 using Hangfire;
@@ -8133,6 +8788,7 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IPostService, PostService>();
         services.AddScoped<ICommentService, CommentService>();
+        services.AddScoped<IClubService, ClubService>();
         services.AddHttpClient();
         services.AddHttpContextAccessor();
         services.AddBackgroundJobsConfig(configuration);
@@ -8620,37 +9276,6 @@ public class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
 }
 ```
 
-## File: Program.cs
-```csharp
-using Sportiva;
-
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDependencies(builder.Configuration);
-
-var app = builder.Build();
-
-app.UseHttpsRedirection();
-app.UseStaticFiles();
-
-app.UseCors();
-
-app.UseAuthentication();
-
-app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "careerPath V1");
-    });
-}
-
-app.MapControllers();
-
-app.Run();
-```
-
 ## File: repomix.config.json
 ```json
 {
@@ -8684,755 +9309,461 @@ app.Run();
 //tree /F /A > tree.txt
 ```
 
+## File: Services/Abstraction/IBookingService.cs
+```csharp
+using Sportiva.Contracts.Bookings;
+using Sportiva.Contracts.Common;
+using Sportiva.Enums;
+
+namespace Sportiva.Services;
+
+public interface IBookingService
+{
+    Task<Result<BookingResponse>> GetBookingAsync(
+        string bookingId, string currentUserId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<BookingResponse>>> GetMyBookingsAsync(
+        string userId, RequestFilters filters, BookingStatus? status = null, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<BookingResponse>>> GetCourtBookingsAsync(
+        string userId, string courtId, RequestFilters filters, DateOnly? date = null, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<BookingResponse>>> GetClubBookingsAsync(
+        string userId, string clubId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<BookingResponse>> CreateBookingAsync(
+        string userId, CreateBookingRequest request, CancellationToken ct = default);
+
+    Task<Result> CancelBookingAsync(
+        string userId, string bookingId, CancellationToken ct = default);
+
+    Task<Result<BookingResponse>> GetBookingReceiptAsync(
+        string userId, string bookingId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IClubService.cs
+```csharp
+using Sportiva.Contracts.Clubs;
+using Sportiva.Contracts.Common;
+
+namespace Sportiva.Services;
+
+public interface IClubService
+{
+    Task<Result<ClubResponse>> GetClubAsync(
+        string clubId, string? currentUserId = null, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ClubResponse>>> GetClubsAsync(
+        string? currentUserId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<ClubResponse>> CreateClubAsync(
+        string ownerId, CreateClubRequest request, CancellationToken ct = default);
+
+    Task<Result<ClubResponse>> UpdateClubAsync(
+        string userId, string clubId, UpdateClubRequest request, CancellationToken ct = default);
+    //soft delete
+    Task<Result> DeleteClubAsync(
+        string userId, string clubId, CancellationToken ct = default);
+
+    Task<Result> ToggleClubStatusAsync(
+        string userId, string clubId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ClubResponse>>> GetMyClubsAsync(
+        string userId, RequestFilters filters, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IClubSubscriptionService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Subscriptions;
+
+namespace Sportiva.Services;
+
+public interface IClubSubscriptionService
+{
+    Task<Result<ClubSubscriptionResponse>> GetActiveSubscriptionAsync(
+        string userId, string clubId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ClubSubscriptionResponse>>> GetSubscriptionHistoryAsync(
+        string userId, string clubId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<ClubSubscriptionResponse>> SubscribeAsync(
+        string userId, string clubId, CreateClubSubscriptionRequest request, CancellationToken ct = default);
+
+    Task<Result<ClubSubscriptionResponse>> RenewSubscriptionAsync(
+        string userId, string clubId, CancellationToken ct = default);
+
+    Task<Result> CancelSubscriptionAsync(
+        string userId, string clubId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/ICourtService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Courts;
+using Sportiva.Contracts.Shared.Summaries;
+
+namespace Sportiva.Services;
+
+public interface ICourtService
+{
+    Task<Result<PaginatedList<CourtResponse>>> SearchCourtsAsync(
+        string? currentUserId, RequestFilters filters,
+        SportType? sport = null, string? city = null, DateOnly? date = null,
+        CancellationToken ct = default);
+
+    Task<Result<PaginatedList<CourtResponse>>> GetClubCourtsAsync(
+        string clubId, string? currentUserId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<CourtResponse>> GetCourtAsync(
+        string clubId, string courtId, string? currentUserId = null, CancellationToken ct = default);
+
+    Task<Result<CourtResponse>> CreateCourtAsync(
+        string userId, string clubId, CreateCourtRequest request, CancellationToken ct = default);
+
+    Task<Result<CourtResponse>> UpdateCourtAsync(
+        string userId, string clubId, string courtId, UpdateCourtRequest request, CancellationToken ct = default);
+    //soft delete 
+    Task<Result> DeleteCourtAsync(
+        string userId, string clubId, string courtId, CancellationToken ct = default);
+
+    Task<Result> ToggleCourtStatusAsync(
+        string userId, string clubId, string courtId, CancellationToken ct = default);
+
+    Task<Result<IReadOnlyList<TimeSlotSummary>>> GetCourtAvailabilityAsync(
+        string courtId, DateOnly date, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IFriendlyMatchService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Matches;
+using Sportiva.Contracts.Shared.Summaries;
+using Sportiva.Enums;
+
+namespace Sportiva.Services;
+
+public interface IFriendlyMatchService
+{
+    Task<Result<PaginatedList<FriendlyMatchResponse>>> GetMatchesAsync(
+        string? currentUserId, RequestFilters filters,
+        SportType? sport = null, DateOnly? date = null, string? city = null,
+        CancellationToken ct = default);
+
+    Task<Result<FriendlyMatchResponse>> GetMatchAsync(
+        string matchId, string? currentUserId = null, CancellationToken ct = default);
+
+    Task<Result<FriendlyMatchResponse>> CreateMatchAsync(
+        string userId, CreateFriendlyMatchRequest request, CancellationToken ct = default);
+
+    Task<Result<FriendlyMatchResponse>> UpdateMatchAsync(
+        string userId, string matchId, CreateFriendlyMatchRequest request, CancellationToken ct = default);
+
+    Task<Result> CancelMatchAsync(
+        string userId, string matchId, CancellationToken ct = default);
+
+    Task<Result<IReadOnlyList<ParticipantSummary>>> GetParticipantsAsync(
+        string matchId, CancellationToken ct = default);
+
+    Task<Result> LeaveMatchAsync(
+        string userId, string matchId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<FriendlyMatchResponse>>> GetMyMatchesAsync(
+        string userId, RequestFilters filters, string? role = null, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<FriendlyMatchResponse>>> GetCourtMatchesAsync(
+        string courtId, RequestFilters filters, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IMembershipUpgradeService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Memberships;
+using Sportiva.Enums;
+
+namespace Sportiva.Services;
+
+public interface IMembershipUpgradeService
+{
+    Task<Result<MembershipUpgradeResponse>> GetUpgradeRequestAsync(
+        string requestId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<MembershipUpgradeResponse>>> GetUpgradeRequestsAsync(
+        RequestFilters filters, RequestStatus? status = null, CancellationToken ct = default);
+
+    Task<Result<MembershipUpgradeResponse>> GetMyUpgradeRequestAsync(
+        string userId, CancellationToken ct = default);
+
+    Task<Result<MembershipUpgradeResponse>> SubmitUpgradeRequestAsync(
+        string userId, CreateMembershipUpgradeRequest request, CancellationToken ct = default);
+
+    Task<Result> ReviewUpgradeRequestAsync(
+        string adminId, string requestId, ReviewMembershipUpgradeRequest request, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IMessagingService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Messaging;
+
+namespace Sportiva.Services;
+
+public interface IMessagingService
+{
+    Task<Result<PaginatedList<ConversationSummary>>> GetConversationsAsync(
+        string userId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<MessageResponse>>> GetMessagesAsync(
+        string userId, string otherUserId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<MessageResponse>> SendMessageAsync(
+        string senderId, SendMessageRequest request, CancellationToken ct = default);
+
+    Task<Result> MarkConversationAsReadAsync(
+        string userId, string otherUserId, CancellationToken ct = default);
+
+    Task<Result> DeleteMessageAsync(
+        string userId, string messageId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/INotificationService.cs
+```csharp
+namespace Sportiva.Services;
+
+public interface INotificationService
+{
+    //Task<Result<NotificationListResponse>> GetNotificationsAsync(
+    //    string userId, int pageNumber, int pageSize, CancellationToken ct = default);
+
+    //Task<Result<NotificationCountersResponse>> GetNotificationCountersAsync(
+    //    string userId, CancellationToken ct = default);
+
+    //Task<Result> MarkAsReadAsync(
+    //    string userId, string notificationId, CancellationToken ct = default);
+
+    //Task<Result> MarkAllAsReadAsync(
+    //    string userId, CancellationToken ct = default);
+
+    //Task<Result<NotificationPreferencesListResponse>> GetPreferencesAsync(
+    //    string userId, CancellationToken ct = default);
+
+    //Task<Result> UpdatePreferencesAsync(
+    //    string userId, BulkUpdateNotificationPreferencesRequest request, CancellationToken ct = default);
+
+    //Task SendNotificationAsync(
+    //    string recipientId, NotificationType type, string title, string body,
+    //    string? actorId = null, string? entityType = null, string? entityId = null,
+    //    NotificationPriority priority = NotificationPriority.Normal,
+    //    CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/IReviewService.cs
+```csharp
+using Sportiva.Contracts.Common;
+using Sportiva.Contracts.Reviews;
+
+namespace Sportiva.Services;
+
+public interface IReviewService
+{
+    Task<Result<ReviewResponse>> GetReviewAsync(
+        string reviewId, string? currentUserId = null, CancellationToken ct = default);
+
+    Task<Result<ReviewResponse>> GetBookingReviewAsync(
+        string userId, string bookingId, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ReviewResponse>>> GetCourtReviewsAsync(
+        string courtId, string? currentUserId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ReviewResponse>>> GetClubReviewsAsync(
+        string clubId, string? currentUserId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<PaginatedList<ReviewResponse>>> GetMyReviewsAsync(
+        string userId, RequestFilters filters, CancellationToken ct = default);
+
+    Task<Result<ReviewResponse>> CreateReviewAsync(
+        string userId, CreateReviewRequest request, CancellationToken ct = default);
+
+    Task<Result<ReviewResponse>> UpdateReviewAsync(
+        string userId, string reviewId, CreateReviewRequest request, CancellationToken ct = default);
+
+    Task<Result> DeleteReviewAsync(
+        string userId, string reviewId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/ISubscriptionPlanService.cs
+```csharp
+using Sportiva.Contracts.Subscriptions;
+
+namespace Sportiva.Services;
+
+public interface ISubscriptionPlanService
+{
+    Task<Result<IReadOnlyList<SubscriptionPlanResponse>>> GetPlansAsync(
+        CancellationToken ct = default);
+
+    Task<Result<SubscriptionPlanResponse>> GetPlanAsync(
+        string planId, CancellationToken ct = default);
+
+    Task<Result<SubscriptionPlanResponse>> CreatePlanAsync(
+        CreateClubSubscriptionRequest request, CancellationToken ct = default);
+
+    Task<Result<SubscriptionPlanResponse>> UpdatePlanAsync(
+        string planId, CreateClubSubscriptionRequest request, CancellationToken ct = default);
+
+    Task<Result> ArchivePlanAsync(
+        string planId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/ITimeSlotService.cs
+```csharp
+using Sportiva.Contracts.TimeSlots;
+
+namespace Sportiva.Services;
+
+public interface ITimeSlotService
+{
+    Task<Result<IReadOnlyList<TimeSlotResponse>>> GetTimeSlotsAsync(
+        string courtId, DateOnly? date = null, bool? available = null, CancellationToken ct = default);
+
+    Task<Result<TimeSlotResponse>> GetTimeSlotAsync(
+        string courtId, string slotId, CancellationToken ct = default);
+
+    Task<Result<TimeSlotResponse>> CreateTimeSlotAsync(
+        string userId, string courtId, CreateTimeSlotRequest request, CancellationToken ct = default);
+
+    Task<Result<IReadOnlyList<TimeSlotResponse>>> BulkCreateTimeSlotsAsync(
+        string userId, string courtId, IReadOnlyList<CreateTimeSlotRequest> requests, CancellationToken ct = default);
+
+    Task<Result<TimeSlotResponse>> UpdateTimeSlotAsync(
+        string userId, string courtId, string slotId, CreateTimeSlotRequest request, CancellationToken ct = default);
+
+    Task<Result> DeleteTimeSlotAsync(
+        string userId, string courtId, string slotId, CancellationToken ct = default);
+}
+```
+
+## File: Services/Abstraction/ITournamentService.cs
+```csharp
+namespace Sportiva.Services;
+
+public interface ITournamentService
+{
+    // ── Tournaments ──────────────────────────────────────────────────────────
+
+    //Task<Result<PaginatedList<TournamentResponse>>> GetTournamentsAsync(
+    //    string? currentUserId, RequestFilters filters,
+    //    SportType? sport = null, TournamentStatus? status = null, string? city = null,
+    //    CancellationToken ct = default);
+
+    //Task<Result<TournamentResponse>> GetTournamentAsync(
+    //    string tournamentId, string? currentUserId = null, CancellationToken ct = default);
+
+    //Task<Result<TournamentResponse>> CreateTournamentAsync(
+    //    string userId, CreateTournamentRequest request, CancellationToken ct = default);
+
+    //Task<Result<TournamentResponse>> UpdateTournamentAsync(
+    //    string userId, string tournamentId, CreateTournamentRequest request, CancellationToken ct = default);
+
+    //Task<Result> CancelTournamentAsync(
+    //    string userId, string tournamentId, CancellationToken ct = default);
+
+    //Task<Result> JoinTournamentAsync(
+    //    string userId, string tournamentId, CancellationToken ct = default);
+
+    //Task<Result> LeaveTournamentAsync(
+    //    string userId, string tournamentId, CancellationToken ct = default);
+
+    //Task<Result<PaginatedList<ParticipantSummary>>> GetTournamentParticipantsAsync(
+    //    string tournamentId, RequestFilters filters, CancellationToken ct = default);
+
+    //Task<Result<PaginatedList<TournamentResponse>>> GetMyTournamentsAsync(
+    //    string userId, RequestFilters filters, CancellationToken ct = default);
+
+    //// ── Tournament Matches (bracket) ─────────────────────────────────────────
+
+    //Task<Result<IReadOnlyList<TournamentMatchResponse>>> GetTournamentMatchesAsync(
+    //    string tournamentId, int? round = null, CancellationToken ct = default);
+
+    //Task<Result<TournamentMatchResponse>> GetTournamentMatchAsync(
+    //    string tournamentId, string matchId, CancellationToken ct = default);
+
+    //Task<Result<TournamentMatchResponse>> ScheduleTournamentMatchAsync(
+    //    string userId, string tournamentId, CreateTournamentMatchRequest request, CancellationToken ct = default);
+
+    //Task<Result<TournamentMatchResponse>> UpdateTournamentMatchAsync(
+    //    string userId, string tournamentId, string matchId, CreateTournamentMatchRequest request, CancellationToken ct = default);
+
+    //Task<Result> CancelTournamentMatchAsync(
+    //    string userId, string tournamentId, string matchId, CancellationToken ct = default);
+
+    //Task<Result<TournamentMatchResponse>> SetMatchWinnerAsync(
+    //    string userId, string tournamentId, string matchId, SetTournamentMatchWinnerRequest request, CancellationToken ct = default);
+}
+```
+
 ## File: tree.txt
 ```
 Folder PATH listing
-Volume serial number is 00000092 28EE:D16A
-C:.
-|   .gitignore
-|   ai-context.md
-|   appsettings.json
-|   CancellationExceptionFilter.cs
-|   DependencyInjection.cs
-|   GlobalUsings.cs
-|   Program.cs
-|   README.md
-|   repomix.config.json
-|   sportiva-api-reference.html
-|   Sportiva.csproj
-|   Sportiva.csproj.user
-|   Sportiva.sln
-|   SportivaModels.csproj
-|   tree.txt
-|   
-+---.github
-|   \---workflows
-+---Abstractions
-|   |   Error.cs
-|   |   PaginatedList.cs
-|   |   Result.cs
-|   |   ResultExtensions.cs
-|   |   
-|   \---Consts
-|           DefaultRoles.cs
-|           DefaultUsers.cs
-|           Permissions.cs
-|           RegexPatterns.cs
-|           
-+---Authentication
-|   |   IJwtProvider.cs
-|   |   JwtOptions.cs
-|   |   JwtProvider.cs
-|   |   
-|   \---Filters
-|           HasPermissionAttribute.cs
-|           PermissionAuthorizationHandler.cs
-|           PermissionAuthorizationPolicyProvider.cs
-|           PermissionRequirement.cs
-|           
-+---bin
-|   \---Debug
-|       \---net10.0
-|           |   appsettings.json
-|           |   Asp.Versioning.Abstractions.dll
-|           |   Asp.Versioning.Http.dll
-|           |   Asp.Versioning.Mvc.ApiExplorer.dll
-|           |   Asp.Versioning.Mvc.dll
-|           |   AspNet.Security.OAuth.GitHub.dll
-|           |   Azure.Core.dll
-|           |   Azure.Identity.dll
-|           |   BouncyCastle.Cryptography.dll
-|           |   CloudinaryDotNet.dll
-|           |   FluentValidation.AspNetCore.dll
-|           |   FluentValidation.DependencyInjectionExtensions.dll
-|           |   FluentValidation.dll
-|           |   Hangfire.AspNetCore.dll
-|           |   Hangfire.Core.dll
-|           |   Hangfire.NetCore.dll
-|           |   Hangfire.SqlServer.dll
-|           |   HangfireBasicAuthenticationFilter.dll
-|           |   HealthChecks.Hangfire.dll
-|           |   HealthChecks.SqlServer.dll
-|           |   HealthChecks.UI.Client.dll
-|           |   HealthChecks.UI.Core.dll
-|           |   HealthChecks.Uris.dll
-|           |   HtmlAgilityPack.CssSelectors.NetCore.dll
-|           |   HtmlAgilityPack.dll
-|           |   Humanizer.dll
-|           |   MailKit.dll
-|           |   Mapster.Core.dll
-|           |   Mapster.DependencyInjection.dll
-|           |   Mapster.dll
-|           |   MediatR.Contracts.dll
-|           |   MediatR.dll
-|           |   Microsoft.AspNetCore.Authentication.Google.dll
-|           |   Microsoft.AspNetCore.Authentication.JwtBearer.dll
-|           |   Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
-|           |   Microsoft.AspNetCore.OpenApi.dll
-|           |   Microsoft.Bcl.AsyncInterfaces.dll
-|           |   Microsoft.Bcl.Cryptography.dll
-|           |   Microsoft.Build.Framework.dll
-|           |   Microsoft.CodeAnalysis.CSharp.dll
-|           |   Microsoft.CodeAnalysis.CSharp.Workspaces.dll
-|           |   Microsoft.CodeAnalysis.dll
-|           |   Microsoft.CodeAnalysis.ExternalAccess.RazorCompiler.dll
-|           |   Microsoft.CodeAnalysis.Workspaces.dll
-|           |   Microsoft.CodeAnalysis.Workspaces.MSBuild.dll
-|           |   Microsoft.Data.SqlClient.dll
-|           |   Microsoft.EntityFrameworkCore.Abstractions.dll
-|           |   Microsoft.EntityFrameworkCore.Design.dll
-|           |   Microsoft.EntityFrameworkCore.dll
-|           |   Microsoft.EntityFrameworkCore.Relational.dll
-|           |   Microsoft.EntityFrameworkCore.SqlServer.dll
-|           |   Microsoft.Extensions.Caching.Hybrid.dll
-|           |   Microsoft.Extensions.DependencyModel.dll
-|           |   Microsoft.Identity.Client.dll
-|           |   Microsoft.Identity.Client.Extensions.Msal.dll
-|           |   Microsoft.IdentityModel.Abstractions.dll
-|           |   Microsoft.IdentityModel.JsonWebTokens.dll
-|           |   Microsoft.IdentityModel.Logging.dll
-|           |   Microsoft.IdentityModel.Protocols.dll
-|           |   Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
-|           |   Microsoft.IdentityModel.Tokens.dll
-|           |   Microsoft.OpenApi.dll
-|           |   Microsoft.SqlServer.Server.dll
-|           |   Microsoft.VisualStudio.SolutionPersistence.dll
-|           |   MimeKit.dll
-|           |   Mono.TextTemplating.dll
-|           |   Newtonsoft.Json.dll
-|           |   OneOf.dll
-|           |   repomix.config.json
-|           |   Scalar.AspNetCore.dll
-|           |   Serilog.AspNetCore.dll
-|           |   Serilog.dll
-|           |   Serilog.Extensions.Hosting.dll
-|           |   Serilog.Extensions.Logging.dll
-|           |   Serilog.Formatting.Compact.dll
-|           |   Serilog.Settings.Configuration.dll
-|           |   Serilog.Sinks.Console.dll
-|           |   Serilog.Sinks.Debug.dll
-|           |   Serilog.Sinks.File.dll
-|           |   Sportiva.deps.json
-|           |   Sportiva.dll
-|           |   Sportiva.exe
-|           |   Sportiva.pdb
-|           |   Sportiva.runtimeconfig.json
-|           |   Sportiva.staticwebassets.endpoints.json
-|           |   Sportiva.staticwebassets.runtime.json
-|           |   Swashbuckle.AspNetCore.SwaggerUI.dll
-|           |   System.ClientModel.dll
-|           |   System.CodeDom.dll
-|           |   System.Composition.AttributedModel.dll
-|           |   System.Composition.Convention.dll
-|           |   System.Composition.Hosting.dll
-|           |   System.Composition.Runtime.dll
-|           |   System.Composition.TypedParts.dll
-|           |   System.Configuration.ConfigurationManager.dll
-|           |   System.IdentityModel.Tokens.Jwt.dll
-|           |   System.Linq.Dynamic.Core.dll
-|           |   System.Memory.Data.dll
-|           |   System.Security.Cryptography.ProtectedData.dll
-|           |   System.Xml.XPath.XmlDocument.dll
-|           |   
-|           +---BuildHost-net472
-|           |   |   Microsoft.Build.Locator.dll
-|           |   |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe
-|           |   |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe.config
-|           |   |   Microsoft.IO.Redist.dll
-|           |   |   Newtonsoft.Json.dll
-|           |   |   System.Buffers.dll
-|           |   |   System.Collections.Immutable.dll
-|           |   |   System.CommandLine.dll
-|           |   |   System.Memory.dll
-|           |   |   System.Numerics.Vectors.dll
-|           |   |   System.Runtime.CompilerServices.Unsafe.dll
-|           |   |   System.Threading.Tasks.Extensions.dll
-|           |   |   
-|           |   +---cs
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---de
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---es
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---fr
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---it
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---ja
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---ko
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---pl
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---pt-BR
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---ru
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---tr
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---zh-Hans
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   \---zh-Hant
-|           |           System.CommandLine.resources.dll
-|           |           
-|           +---BuildHost-netcore
-|           |   |   Microsoft.Build.Locator.dll
-|           |   |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.deps.json
-|           |   |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll
-|           |   |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.runtimeconfig.json
-|           |   |   Newtonsoft.Json.dll
-|           |   |   System.Collections.Immutable.dll
-|           |   |   System.CommandLine.dll
-|           |   |   
-|           |   +---cs
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---de
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---es
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---fr
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---it
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---ja
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---ko
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---pl
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---pt-BR
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---ru
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---tr
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   +---zh-Hans
-|           |   |       System.CommandLine.resources.dll
-|           |   |       
-|           |   \---zh-Hant
-|           |           System.CommandLine.resources.dll
-|           |           
-|           +---ca
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---cs
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---de
-|           |       Hangfire.Core.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---es
-|           |       Hangfire.Core.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---fa
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---fr
-|           |       Hangfire.Core.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---it
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---ja
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---ko
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---nb
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---nl
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---pl
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---pt
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---pt-BR
-|           |       Hangfire.Core.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---pt-PT
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---ru
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---runtimes
-|           |   +---unix
-|           |   |   \---lib
-|           |   |       \---net9.0
-|           |   |               Microsoft.Data.SqlClient.dll
-|           |   |               
-|           |   +---win
-|           |   |   \---lib
-|           |   |       \---net9.0
-|           |   |               Microsoft.Data.SqlClient.dll
-|           |   |               
-|           |   +---win-arm64
-|           |   |   \---native
-|           |   |           Microsoft.Data.SqlClient.SNI.dll
-|           |   |           
-|           |   +---win-x64
-|           |   |   \---native
-|           |   |           Microsoft.Data.SqlClient.SNI.dll
-|           |   |           
-|           |   \---win-x86
-|           |       \---native
-|           |               Microsoft.Data.SqlClient.SNI.dll
-|           |               
-|           +---sv
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---tr
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---tr-TR
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---zh
-|           |       Hangfire.Core.resources.dll
-|           |       
-|           +---zh-Hans
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           +---zh-Hant
-|           |       Microsoft.CodeAnalysis.CSharp.resources.dll
-|           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
-|           |       Microsoft.CodeAnalysis.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
-|           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
-|           |       Microsoft.Data.SqlClient.resources.dll
-|           |       
-|           \---zh-TW
-|                   Hangfire.Core.resources.dll
-|                   
-+---Contracts
-|   +---Authentication
-|   |       AuthResponse.cs
-|   |       ConfirmEmailRequest.cs
-|   |       ConfirmEmailRequestValidator.cs
-|   |       ForgetPasswordRequest.cs
-|   |       ForgetPasswordRequestValidator.cs
-|   |       LoginRequest.cs
-|   |       LoginRequestValidator.cs
-|   |       RefreshTokenRequest.cs
-|   |       RefreshTokenRequestValidator.cs
-|   |       RegisterRequest.cs
-|   |       RegisterRequestValidator.cs
-|   |       ResendConfirmationEmailRequest.cs
-|   |       ResendConfirmationEmailRequestValidator.cs
-|   |       ResetPasswordRequest.cs
-|   |       ResetPasswordRequestValidator.cs
-|   |       
-|   +---Bookings
-|   |       BookingResponse.cs
-|   |       CreateBookingRequest.cs
-|   |       
-|   +---Clubs
-|   |       ClubResponse.cs
-|   |       ClubSubscriptionSummary.cs
-|   |       CreateClubRequest.cs
-|   |       UpdateClubRequest.cs
-|   |       
-|   +---Common
-|   |       RequestFilters.cs
-|   |       
-|   +---Courts
-|   |       CourtResponse.cs
-|   |       CreateCourtRequest.cs
-|   |       UpdateCourtRequest.cs
-|   |       
-|   +---Followers
-|   |       UserFollowResponse.cs
-|   |       
-|   +---Matches
-|   |       CreateFriendlyMatchRequest.cs
-|   |       FriendlyMatchResponse.cs
-|   |       JoinMatchRequest.cs
-|   |       MatchJoinRequestResponse.cs
-|   |       ReviewJoinRequestRequest.cs
-|   |       
-|   +---Memberships
-|   |       CreateMembershipUpgradeRequest.cs
-|   |       MembershipUpgradeResponse.cs
-|   |       ReviewMembershipUpgradeRequest.cs
-|   |       
-|   +---Messaging
-|   |       ConversationSummary.cs
-|   |       MessageResponse.cs
-|   |       SendMessageRequest.cs
-|   |       
-|   +---Notifications
-|   |       BulkUpdateNotificationPreferencesRequest.cs
-|   |       NotificationCountersResponse.cs
-|   |       NotificationListResponse.cs
-|   |       NotificationPreferenceItem.cs
-|   |       NotificationPreferenceResponse.cs
-|   |       NotificationPreferencesListResponse.cs
-|   |       NotificationResponse.cs
-|   |       
-|   +---Posts
-|   |       CommentReplyResponse.cs
-|   |       CreateCommentRequest.cs
-|   |       CreatePostRequest.cs
-|   |       CreateReplyRequest.cs
-|   |       PostCommentResponse.cs
-|   |       PostLikerResponse.cs
-|   |       PostResponse.cs
-|   |       ToggleCommentLikeResponse.cs
-|   |       ToggleLikeResponse.cs
-|   |       ToggleReplyLikeResponse.cs
-|   |       UpdateCommentRequest.cs
-|   |       UpdatePostRequest.cs
-|   |       UpdateReplyRequest.cs
-|   |       
-|   +---Reviews
-|   |       CreateReviewRequest.cs
-|   |       ReviewResponse.cs
-|   |       
-|   +---Shared
-|   |   +---Enums
-|   |   |       BookingStatusDto.cs
-|   |   |       JoinRequestStatusDto.cs
-|   |   |       MatchStatusDto.cs
-|   |   |       NotificationPriorityDto.cs
-|   |   |       NotificationTypeDto.cs
-|   |   |       PaymentStatusDto.cs
-|   |   |       RequestStatusDto.cs
-|   |   |       SportTypeDto.cs
-|   |   |       TournamentStatusDto.cs
-|   |   |       
-|   |   \---Summaries
-|   |           ClubSummary.cs
-|   |           CourtSummary.cs
-|   |           FriendlyMatchSummary.cs
-|   |           ParticipantSummary.cs
-|   |           ReviewSummary.cs
-|   |           SubscriptionPlanSummary.cs
-|   |           TimeSlotSummary.cs
-|   |           UserCardSummary.cs
-|   |           UserSummary.cs
-|   |           
-|   +---Subscriptions
-|   |       ClubSubscriptionResponse.cs
-|   |       CreateClubSubscriptionRequest.cs
-|   |       SubscriptionPaymentSummary.cs
-|   |       SubscriptionPlanResponse.cs
-|   |       
-|   +---TimeSlots
-|   |       CreateTimeSlotRequest.cs
-|   |       TimeSlotResponse.cs
-|   |       
-|   +---Tournaments
-|   |       CreateTournamentMatchRequest.cs
-|   |       CreateTournamentRequest.cs
-|   |       SetTournamentMatchWinnerRequest.cs
-|   |       TournamentMatchResponse.cs
-|   |       TournamentResponse.cs
-|   |       
-|   \---Users
-|           ToggleFollowResponse.cs
-|           UpdateProfileCoverRequest.cs
-|           UpdateProfileInfoRequest.cs
-|           UpdateProfilePhotoRequest.cs
-|           UserProfileResponse.cs
-|           
-+---Controllers
-|       AuthController.cs
-|       CommentsController.cs
-|       PostsController.cs
-|       ProfilesController.cs
-|       
-+---Entities
-|       ApplicationRole.cs
-|       ApplicationUser.cs
-|       Booking.cs
-|       Club.cs
-|       ClubSubscription.cs
-|       CommentReaction.cs
-|       CommentReply.cs
-|       Court.cs
-|       FriendlyMatch.cs
-|       MatchJoinRequest.cs
-|       MembershipUpgrade.cs
-|       Message.cs
-|       Notification.cs
-|       NotificationPreference.cs
-|       Post.cs
-|       PostComment.cs
-|       PostLike.cs
-|       RefreshToken.cs
-|       ReplyReaction.cs
-|       Review.cs
-|       SubscriptionPayment.cs
-|       SubscriptionPlan.cs
-|       TimeSlot.cs
-|       Tournament.cs
-|       TournamentMatch.cs
-|       TournamentParticipant.cs
-|       UserFollow.cs
-|       UserProfile.cs
-|       
-+---Enums
-|       BookingStatus.cs
-|       JoinRequestStatus.cs
-|       MatchStatus.cs
-|       NotificationPriority.cs
-|       NotificationType.cs
-|       PaymentStatus.cs
-|       RequestStatus.cs
-|       SportType.cs
-|       
-+---Errors
-|       CommentErrors.cs
-|       PostErrors.cs
-|       ProfileErrors.cs
-|       UserErrors.cs
-|       
-+---Extensions
-|       QueryableExtensions.cs
-|       UserExtensions.cs
-|       
-+---Helpers
-|       EmailBodyBuilder.cs
-|       FileHelper.cs
-|       ForgetPasswordBodyBuilder.cs
-|       
-+---Mapping
-|       MappingConfigurations.cs
-|       
-+---Migrations
-|       20260610205538_init.cs
-|       20260610205538_init.Designer.cs
-|       20260610222735_addcreateaddb.cs
-|       20260610222735_addcreateaddb.Designer.cs
-|       ApplicationDbContextModelSnapshot.cs
-|       
-+---obj
-|   |   project.assets.json
-|   |   project.nuget.cache
-|   |   Sportiva.csproj.nuget.dgspec.json
-|   |   Sportiva.csproj.nuget.g.props
-|   |   Sportiva.csproj.nuget.g.targets
-|   |   SportivaModels.csproj.nuget.dgspec.json
-|   |   SportivaModels.csproj.nuget.g.props
-|   |   SportivaModels.csproj.nuget.g.targets
-|   |   
-|   \---Debug
-|       \---net10.0
-|           |   .NETCoreApp,Version=v10.0.AssemblyAttributes.cs
-|           |   ApiEndpoints.json
-|           |   apphost.exe
-|           |   rjimswa.dswa.cache.json
-|           |   rjsmcshtml.dswa.cache.json
-|           |   rjsmrazor.dswa.cache.json
-|           |   rpswa.dswa.cache.json
-|           |   Sportiva.AssemblyInfo.cs
-|           |   Sportiva.AssemblyInfoInputs.cache
-|           |   Sportiva.assets.cache
-|           |   Sportiva.csproj.AssemblyReference.cache
-|           |   Sportiva.csproj.BuildWithSkipAnalyzers
-|           |   Sportiva.csproj.CoreCompileInputs.cache
-|           |   Sportiva.csproj.FileListAbsolute.txt
-|           |   Sportiva.csproj.Up2Date
-|           |   Sportiva.dll
-|           |   Sportiva.GeneratedMSBuildEditorConfig.editorconfig
-|           |   Sportiva.genruntimeconfig.cache
-|           |   Sportiva.GlobalUsings.g.cs
-|           |   Sportiva.MvcApplicationPartsAssemblyInfo.cache
-|           |   Sportiva.MvcApplicationPartsAssemblyInfo.cs
-|           |   Sportiva.pdb
-|           |   Sportiva.sourcelink.json
-|           |   SportivaModels.AssemblyInfo.cs
-|           |   SportivaModels.AssemblyInfoInputs.cache
-|           |   SportivaModels.assets.cache
-|           |   SportivaModels.GeneratedMSBuildEditorConfig.editorconfig
-|           |   SportivaModels.GlobalUsings.g.cs
-|           |   staticwebassets.build.endpoints.json
-|           |   staticwebassets.build.json
-|           |   staticwebassets.build.json.cache
-|           |   staticwebassets.development.json
-|           |   staticwebassets.references.upToDateCheck.txt
-|           |   staticwebassets.removed.txt
-|           |   staticwebassets.upToDateCheck.txt
-|           |   swae.build.ex.cache
-|           |   
-|           +---EndpointInfo
-|           |       Sportiva.json
-|           |       Sportiva.OpenApiFiles.cache
-|           |       
-|           +---ref
-|           |       Sportiva.dll
-|           |       
-|           +---refint
-|           |       Sportiva.dll
-|           |       
-|           \---staticwebassets
-+---Persistence
-|   |   ApplicationDbContext.cs
-|   |   
-|   +---EntitiesConfigurations
-|   |       BookingConfiguration.cs
-|   |       ClubConfiguration.cs
-|   |       ClubSubscriptionConfiguration.cs
-|   |       CourtConfiguration.cs
-|   |       DefaultRoles.cs
-|   |       FriendlyMatchConfiguration.cs
-|   |       MatchJoinRequestConfiguration.cs
-|   |       MembershipUpgradeConfiguration.cs
-|   |       PostConfiguration.cs
-|   |       PostLikeConfiguration.cs
-|   |       ReviewConfiguration.cs
-|   |       RoleClaimConfiguration.cs
-|   |       RoleConfiguration.cs
-|   |       SubscriptionPaymentConfiguration.cs
-|   |       SubscriptionPlanConfiguration.cs
-|   |       TimeSlotConfiguration.cs
-|   |       UserConfiguration.cs
-|   |       UserProfileConfiguration.cs
-|   |       
-|   \---Migrations
-+---Properties
-|       launchSettings.json
-|       
-+---Services
-|   +---Abstraction
-|   |       IAuthService.cs
-|   |       IBookingService.cs
-|   |       IClubService.cs
-|   |       IClubSubscriptionService.cs
-|   |       ICommentService.cs
-|   |       ICourtService.cs
-|   |       IFriendlyMatchService.cs
-|   |       IMembershipUpgradeService.cs
-|   |       IMessagingService.cs
-|   |       INotificationService.cs
-|   |       IPostService.cs
-|   |       IProfileService.cs
-|   |       IReviewService.cs
-|   |       ISubscriptionPlanService.cs
-|   |       ITimeSlotService.cs
-|   |       ITournamentService.cs
-|   |       
-|   \---Implementation
-|           AuthService.cs
-|           CommentService.cs
-|           EmailService.cs
-|           PostService.cs
-|           ProfileService.cs
-|           
-+---Settings
-|       GitHubOAuthOptions.cs
-|       GoogleOAuthOptions.cs
-|       MailSettings.cs
-|       
-\---wwwroot
-    +---Covers
-    |       f78b8e36212c497ea6d2cac1490cbfc5.jpg
-    |       
-    +---Posts
-    |       4a993bdd7ce6448bb393ece37213090d.jpg
-    |       513af92b9b604b55a9767f8b2706ac4a.jpg
-    |       bb96732141c54bb0b41aef53e41c3572.png
-    |       
-    +---Profiles
-    |       089b2814c6aa4deda1b1b5419b0dad69.jpg
-    |       
-    \---uploads
-        +---covers
-        |       b6a139955da9427ab4e03563e81945d1.jpg
-        |       
-        +---posts
-        \---profiles
-                cbd95ecd198141aab307f3564185e3ba.jpg
+Volume serial number is 0000024E 28EE:D16A
+C:\USERS\AIO\SOURCE\REPOS\SPORTIVAAPI\SPORTIVA\SRC
+Invalid path - \USERS\AIO\SOURCE\REPOS\SPORTIVAAPI\SPORTIVA\SRC
+No subfolders exist
+```
+
+## File: Program.cs
+```csharp
+using Microsoft.AspNetCore.HttpOverrides;
+using Sportiva;
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDependencies(builder.Configuration);
+
+var app = builder.Build();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+//app.MapOpenApi();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/openapi/v1.json", "careerPath V1");
+});
+
+app.MapControllers();
+
+app.Run();
+
+
+
+//IClubService — كل حاجة بتتعلق بيه
+//ISubscriptionPlanService — الـ plans لازم تتعمل قبل الـ club subscriptions
+//IClubSubscriptionService — بعد الـ plans
+//ICourtService — بيتبع الـ club
+//ITimeSlotService — بيتبع الـ court
+//IBookingService — محتاج court + time slot
+//IReviewService — محتاج booking
+//IMembershipUpgradeService — مستقل نسبياً
+//IFriendlyMatchService — محتاج court
+//IMatchJoinRequestService — بيتبع الـ match
+//ITournamentService — أضخم feature، بيتبع court كمان
+//INotificationService — cross-cutting، يتعمل قبل ما تشتغل على الـ real-time features
+//IMessagingService — آخر حاجة، مستقلة تماماً
 ```

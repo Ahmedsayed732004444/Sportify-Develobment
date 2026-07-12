@@ -2,7 +2,7 @@
 {
     public class FileHelper
     {
-        public async static Task<string> UploadeFileAsync(IFormFile file, string location, IWebHostEnvironment env, IHttpContextAccessor accessor)
+        public async static Task<string?> UploadeFileAsync(IFormFile file, string location, IWebHostEnvironment env, IHttpContextAccessor accessor)
         {
             if (file is null)
                 return null;
