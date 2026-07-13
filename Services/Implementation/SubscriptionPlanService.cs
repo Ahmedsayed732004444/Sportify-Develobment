@@ -73,14 +73,14 @@ public class SubscriptionPlanService(
             if (string.IsNullOrWhiteSpace(request.Name))
                 return Result.Failure<SubscriptionPlanResponse>(SubscriptionErrors.InvalidPlan);
 
-            if (request.MonthlyPrice < 0 || request.MaxCourts <= 0)
+            if (request.Price < 0 || request.MaxCourts <= 0)
                 return Result.Failure<SubscriptionPlanResponse>(SubscriptionErrors.InvalidPlan);
 
             var plan = new SubscriptionPlan
             {
                 Name = request.Name,
                 Description = request.Description,
-                MonthlyPrice = request.MonthlyPrice,
+                MonthlyPrice = request.Price,
                 MaxCourts = request.MaxCourts,
                 IsActive = true
             };
@@ -111,7 +111,7 @@ public class SubscriptionPlanService(
             if (string.IsNullOrWhiteSpace(request.Name))
                 return Result.Failure<SubscriptionPlanResponse>(SubscriptionErrors.InvalidPlan);
 
-            if (request.MonthlyPrice < 0 || request.MaxCourts <= 0)
+            if (request.Price < 0 || request.MaxCourts <= 0)
                 return Result.Failure<SubscriptionPlanResponse>(SubscriptionErrors.InvalidPlan);
 
             var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId, ct);
@@ -120,7 +120,7 @@ public class SubscriptionPlanService(
 
             plan.Name = request.Name;
             plan.Description = request.Description;
-            plan.MonthlyPrice = request.MonthlyPrice;
+            plan.MonthlyPrice = request.Price;
             plan.MaxCourts = request.MaxCourts;
             plan.IsActive = request.IsActive;
 

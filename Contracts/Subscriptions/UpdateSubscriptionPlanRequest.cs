@@ -3,7 +3,7 @@ namespace Sportiva.Contracts.Subscriptions;
 public record UpdateSubscriptionPlanRequest(
     string  Name,
     string? Description,
-    decimal MonthlyPrice,
+    decimal Price,
     int     MaxCourts,
     bool    IsActive
 );
