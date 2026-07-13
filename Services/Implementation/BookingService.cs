@@ -1,4 +1,4 @@
-﻿using Sportiva.Abstractions;
+using Sportiva.Abstractions;
 using Sportiva.Contracts.Bookings;
 using Sportiva.Contracts.Common;
 using Sportiva.Contracts.Shared.Enums;
@@ -141,7 +141,12 @@ namespace Sportiva.Services.Implementation
                 await transaction.CommitAsync(ct);
 
                 // Map to response
-                var response = MapToResponse(booking, timeSlot, timeSlot.Court, userId);
+                booking.TimeSlot = timeSlot;
+                booking.Court = timeSlot.Court;
+
+                using var scope = new MapContextScope();
+                scope.Context.Parameters["currentUserId"] = userId;
+                var response = booking.Adapt<BookingResponse>();
                 return Result.Success(response);
             }
             catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("UNIQUE constraint", StringComparison.OrdinalIgnoreCase) == true)
@@ -228,7 +233,9 @@ namespace Sportiva.Services.Implementation
                     "Booking.Forbidden", "Not authorized to view this booking", 403));
             }
 
-            var response = MapToResponse(booking, booking.TimeSlot, booking.Court, currentUserId);
+            using var scope = new MapContextScope();
+            scope.Context.Parameters["currentUserId"] = currentUserId;
+            var response = booking.Adapt<BookingResponse>();
             return Result.Success(response);
         }
 
@@ -279,7 +286,9 @@ namespace Sportiva.Services.Implementation
                     "Booking.Forbidden", "Not authorized to view this receipt", 403));
             }
 
-            var response = MapToResponse(booking, booking.TimeSlot, booking.Court, userId);
+            using var scope = new MapContextScope();
+            scope.Context.Parameters["currentUserId"] = userId;
+            var response = booking.Adapt<BookingResponse>();
             return Result.Success(response);
         }
 
@@ -426,14 +435,12 @@ namespace Sportiva.Services.Implementation
             }
 
             // Build query
+            // Build query (Clean and simple)
             var query = _context.Bookings
                 .AsNoTracking()
-                .Where(b => b.UserId == userId)
-                .Include(b => b.Court)
-                .ThenInclude(c => c.Club)
-                .Include(b => b.TimeSlot);
+                .Where(b => b.UserId == userId);
 
-            // Apply status filter if provided
+            // Apply status filter if provided (Now it will work perfectly without errors)
             if (status.HasValue)
             {
                 query = query.Where(b => b.Status == status.Value);
@@ -442,23 +449,13 @@ namespace Sportiva.Services.Implementation
             // Order: upcoming first (ascending StartTime)
             query = query.OrderBy(b => b.TimeSlot.Day).ThenBy(b => b.TimeSlot.StartTime);
 
-            // Paginate
-            var paginatedList = await PaginatedList<Booking>.CreateAsync(
-                query, filters.PageNumber, filters.PageSize, ct);
+            using var scope = new MapContextScope();
+            scope.Context.Parameters["currentUserId"] = userId;
 
-            // Map to response
-            var responses = paginatedList.Items
-                .Select(b => MapToResponse(b, b.TimeSlot, b.Court, userId))
-                .ToList();
-
-            var result = new PaginatedList<BookingResponse>
-            {
-                Items = responses,
-                PageNumber = paginatedList.PageNumber,
-                PageSize = paginatedList.PageSize,
-                TotalCount = paginatedList.TotalCount,
-                TotalPages = paginatedList.TotalPages
-            };
+            // Project and paginate
+            var projectedQuery = query.ProjectToType<BookingResponse>();
+            var result = await PaginatedList<BookingResponse>.CreateAsync(
+                projectedQuery, filters.PageNumber, filters.PageSize, ct);
 
             return Result.Success(result);
         }
@@ -511,11 +508,8 @@ namespace Sportiva.Services.Implementation
             // Build query
             var query = _context.Bookings
                 .AsNoTracking()
-                .Where(b => b.CourtId == courtId)
-                .Include(b => b.Court)
-                .ThenInclude(c => c.Club)
-                .Include(b => b.TimeSlot);
-
+                .Where(b => b.CourtId == courtId);
+            
             // Apply date filter if provided
             if (date.HasValue)
             {
@@ -525,23 +519,13 @@ namespace Sportiva.Services.Implementation
             // Order: upcoming slots first (ascending StartTime)
             query = query.OrderBy(b => b.TimeSlot.Day).ThenBy(b => b.TimeSlot.StartTime);
 
-            // Paginate
-            var paginatedList = await PaginatedList<Booking>.CreateAsync(
-                query, filters.PageNumber, filters.PageSize, ct);
+            using var scope = new MapContextScope();
+            scope.Context.Parameters["currentUserId"] = userId;
 
-            // Map to response
-            var responses = paginatedList.Items
-                .Select(b => MapToResponse(b, b.TimeSlot, b.Court, userId))
-                .ToList();
-
-            var result = new PaginatedList<BookingResponse>
-            {
-                Items = responses,
-                PageNumber = paginatedList.PageNumber,
-                PageSize = paginatedList.PageSize,
-                TotalCount = paginatedList.TotalCount,
-                TotalPages = paginatedList.TotalPages
-            };
+            // Project and paginate
+            var projectedQuery = query.ProjectToType<BookingResponse>();
+            var result = await PaginatedList<BookingResponse>.CreateAsync(
+                projectedQuery, filters.PageNumber, filters.PageSize, ct);
 
             return Result.Success(result);
         }
@@ -598,31 +582,19 @@ namespace Sportiva.Services.Implementation
             // Build query: all bookings across all courts in the club
             var query = _context.Bookings
                 .AsNoTracking()
-                .Where(b => b.Court.ClubId == clubId)
-                .Include(b => b.Court)
-                .ThenInclude(c => c.Club)
-                .Include(b => b.TimeSlot);
+                .Where(b => b.Court.ClubId == clubId);
+                
 
             // Order: upcoming slots first (ascending StartTime)
             query = query.OrderBy(b => b.TimeSlot.Day).ThenBy(b => b.TimeSlot.StartTime);
 
-            // Paginate
-            var paginatedList = await PaginatedList<Booking>.CreateAsync(
-                query, filters.PageNumber, filters.PageSize, ct);
+            using var scope = new MapContextScope();
+            scope.Context.Parameters["currentUserId"] = userId;
 
-            // Map to response
-            var responses = paginatedList.Items
-                .Select(b => MapToResponse(b, b.TimeSlot, b.Court, userId))
-                .ToList();
-
-            var result = new PaginatedList<BookingResponse>
-            {
-                Items = responses,
-                PageNumber = paginatedList.PageNumber,
-                PageSize = paginatedList.PageSize,
-                TotalCount = paginatedList.TotalCount,
-                TotalPages = paginatedList.TotalPages
-            };
+            // Project and paginate
+            var projectedQuery = query.ProjectToType<BookingResponse>();
+            var result = await PaginatedList<BookingResponse>.CreateAsync(
+                projectedQuery, filters.PageNumber, filters.PageSize, ct);
 
             return Result.Success(result);
         }
@@ -743,47 +715,7 @@ namespace Sportiva.Services.Implementation
             return utcDateTime;
         }
 
-        /// <summary>
-        /// Maps a Booking entity to BookingResponse DTO.
-        /// </summary>
-        private static BookingResponse MapToResponse(Booking booking, TimeSlot timeSlot, Court court, string currentUserId)
-        {
-            var isMine = booking.UserId == currentUserId;
-            var canCancel = booking.Status == BookingStatus.Confirmed || booking.Status == BookingStatus.Pending;
-            var canReview = booking.Status == BookingStatus.Completed;
 
-            var courtSummary = new CourtSummary(
-                court.Id,
-                court.Name,
-                court.ImageUrl,
-                (SportTypeDto)court.SportType,
-                court.PricePerHour,
-                new ClubSummary(court.Club.Id, court.Club.Name, court.Club.LogoUrl, court.Club.City, court.Club.Governorate));
-
-            var timeSlotSummary = new TimeSlotSummary(
-                timeSlot.Id,
-                timeSlot.Day,
-                timeSlot.StartTime,
-                timeSlot.EndTime,
-                timeSlot.IsBooked);
-
-            // Load user profile for BookedBy summary
-            var user = new UserSummary(booking.UserId, booking.UserId, null); // TODO: load from ApplicationUser if needed
-
-            return new BookingResponse(
-                booking.Id,
-                $"BK-{booking.Id.Substring(0, 8).ToUpper()}", // Simple booking number
-                (BookingStatusDto)booking.Status,
-                booking.Price,
-                courtSummary,
-                timeSlotSummary,
-                user,
-                isMine,
-                canCancel,
-                canReview,
-                null, // ExistingReview — load separately if needed
-                booking.BookingDate);
-        }
 
         #endregion
     }
