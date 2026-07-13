@@ -1,5 +1,12 @@
-﻿using Hangfire;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Mapster;
+using MapsterMapper;
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Sportiva.Services;
 
 namespace Sportiva;
@@ -52,7 +59,8 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IPostService, PostService>();
         services.AddScoped<ICommentService, CommentService>();
-        services.AddScoped<IClubService, ClubService>();
+        services.AddScoped<ISubscriptionPlanService, SubscriptionPlanService>();
+        services.AddScoped<IClubSubscriptionService, ClubSubscriptionService>();
         services.AddHttpClient();
         services.AddHttpContextAccessor();
         services.AddBackgroundJobsConfig(configuration);

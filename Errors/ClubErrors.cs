@@ -1,4 +1,7 @@
-﻿namespace Sportiva.Errors;
+﻿using Microsoft.AspNetCore.Http;
+using Sportiva.Abstractions;
+
+namespace Sportiva.Errors;
 
 public record ClubErrors
 {

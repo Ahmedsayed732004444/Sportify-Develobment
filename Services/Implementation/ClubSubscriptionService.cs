@@ -5,6 +5,7 @@ using Sportiva.Contracts.Shared.Summaries;
 using Sportiva.Contracts.Subscriptions;
 using Sportiva.Enums;
 using Sportiva.Extensions;
+using Sportiva.Persistence;
 
 namespace Sportiva.Services.Implementation
 {
@@ -24,7 +25,7 @@ namespace Sportiva.Services.Implementation
         private const decimal MinimumRefundAmount = 0.01m;
 
         public ClubSubscriptionService(ApplicationDbContext context, IWalletService walletService)
-        {
+{
             _context = context;
             _walletService = walletService;
         }
@@ -68,7 +69,7 @@ namespace Sportiva.Services.Implementation
                 return Result.Failure<ClubSubscriptionResponse>(idValidation.Error);
 
             if (string.IsNullOrWhiteSpace(request.PlanId))
-            {
+    {
                 return Result.Failure<ClubSubscriptionResponse>(new Error(
                     "Validation.PlanId", "PlanId cannot be null or empty", 400));
             }
@@ -145,8 +146,8 @@ namespace Sportiva.Services.Implementation
 
             // Create subscription and payment in a transaction
             using var transaction = await _context.Database.BeginTransactionAsync(ct);
-            try
-            {
+        try
+        {
                 var subscription = new ClubSubscription
                 {
                     UserId = userId,
@@ -218,6 +219,23 @@ namespace Sportiva.Services.Implementation
                 return Result.Failure<ClubSubscriptionResponse>(idValidation.Error);
 
             var subscription = await _context.ClubSubscriptions
+                .Where(s => s.ClubId == clubId && !s.IsDeleted &&
+                            s.StartDate <= now && s.EndDate >= now)
+                .Select(s => new ClubSubscriptionResponse(
+                    s.Id,
+                    new ClubSummary(s.Club.Id, s.Club.Name, s.Club.LogoUrl, s.Club.City, s.Club.Governorate),
+                    new SubscriptionPlanSummary(s.Plan.Id, s.Plan.Name, s.Plan.MonthlyPrice, s.Plan.MaxCourts),
+                    s.StartDate,
+                    s.EndDate,
+                    true,
+                    s.Payments.Count,
+                    s.Payments
+                        .OrderByDescending(p => p.PaidAt)
+                        .ThenByDescending(p => p.Id)
+                        .Select(p => new SubscriptionPaymentSummary(
+                            p.Id, p.Amount, (PaymentStatusDto)p.Status, p.TransactionId, p.PaidAt))
+                        .FirstOrDefault()
+                ))
                 .AsNoTracking()
                 .Include(s => s.Plan)
                 .Include(s => s.Club)
@@ -229,14 +247,19 @@ namespace Sportiva.Services.Implementation
                     !s.IsDeleted, ct);
 
             if (subscription is null)
-            {
+                return Result.Failure<ClubSubscriptionResponse>(SubscriptionErrors.SubscriptionNotFound);
+
+            return Result.Success(subscription);
+        }
+        catch (Exception ex)
+        {
                 return Result.Failure<ClubSubscriptionResponse>(new Error(
                     "Subscription.NotFound", "No active subscription found for this user and club", 404));
-            }
+        }
 
             var response = MapToResponse(subscription);
             return Result.Success(response);
-        }
+    }
 
         /// <summary>
         /// Gets paginated subscription history for a user at a specific club.
@@ -257,16 +280,16 @@ namespace Sportiva.Services.Implementation
         /// - Validation.ClubId (400) - clubId null/empty
         /// - Validation.Filters (400) - invalid pagination parameters
         /// </returns>
-        public async Task<Result<PaginatedList<ClubSubscriptionResponse>>> GetSubscriptionHistoryAsync(
-            string userId, string clubId, RequestFilters filters, CancellationToken ct = default)
-        {
+    public async Task<Result<PaginatedList<ClubSubscriptionResponse>>> GetSubscriptionHistoryAsync(
+        string userId, string clubId, RequestFilters filters, CancellationToken ct = default)
+    {
             var idValidation = ValidateIds(userId, clubId);
             if (idValidation.IsFailure)
                 return Result.Failure<PaginatedList<ClubSubscriptionResponse>>(idValidation.Error);
 
             // Validate filters
             if (filters.PageNumber < 1)
-            {
+        {
                 return Result.Failure<PaginatedList<ClubSubscriptionResponse>>(new Error(
                     "Validation.Filters", "PageNumber must be >= 1", 400));
             }
@@ -360,19 +383,19 @@ namespace Sportiva.Services.Implementation
             {
                 return Result.Failure<ClubSubscriptionResponse>(new Error(
                     "Subscription.NotFound", "Subscription not found", 404));
-            }
+        }
 
             // Ownership check
             if (existingSubscription.UserId != userId)
             {
                 return Result.Failure<ClubSubscriptionResponse>(new Error(
                     "Subscription.Forbidden", "Not authorized to renew this subscription", 403));
-            }
+    }
 
             // Can only renew if Cancelled or Expired
             if (existingSubscription.Status != SubscriptionStatus.Cancelled &&
                 existingSubscription.Status != SubscriptionStatus.Expired)
-            {
+        {
                 return Result.Failure<ClubSubscriptionResponse>(new Error(
                     "Subscription.CannotRenew",
                     $"Cannot renew subscription in {existingSubscription.Status} state. Only Cancelled or Expired subscriptions can be renewed.",
@@ -438,30 +461,30 @@ namespace Sportiva.Services.Implementation
 
                 // Create payment record
                 var payment = new SubscriptionPayment
-                {
+            {
                     ClubSubscriptionId = newSubscription.Id,
                     Amount = calculatedPrice,
                     Status = PaymentStatus.Paid,
                     PaidAt = DateTime.UtcNow,
                     TransactionId = $"REN-{newSubscription.Id}"
-                };
+            };
 
                 _context.SubscriptionPayments.Add(payment);
-                await _context.SaveChangesAsync(ct);
+            await _context.SaveChangesAsync(ct);
 
                 await transaction.CommitAsync(ct);
 
                 var response = await MapToResponseAsync(newSubscription, ct);
-                return Result.Success(response);
-            }
+            return Result.Success(response);
+        }
             catch
-            {
+        {
                 await transaction.RollbackAsync(ct);
                 await _walletService.CreditAsync(
                     userId, calculatedPrice, "Subscription.Renew rollback", ct);
                 throw;
-            }
         }
+    }
 
         /// <summary>
         /// Cancels an active subscription and processes refund.
@@ -488,8 +511,8 @@ namespace Sportiva.Services.Implementation
         /// - Subscription.Expired (409) - subscription already expired
         /// </returns>
         public async Task<Result> CancelSubscriptionAsync(
-            string userId, string clubId, CancellationToken ct = default)
-        {
+        string userId, string clubId, CancellationToken ct = default)
+    {
             var idValidation = ValidateIds(userId, clubId);
             if (idValidation.IsFailure)
                 return idValidation;
@@ -510,7 +533,7 @@ namespace Sportiva.Services.Implementation
 
             // Ownership check (defensive re-check)
             if (subscription.UserId != userId)
-            {
+        {
                 return Result.Failure(new Error(
                     "Subscription.Forbidden", "Not authorized to cancel this subscription", 403));
             }
@@ -562,26 +585,26 @@ namespace Sportiva.Services.Implementation
             if (string.IsNullOrWhiteSpace(userId))
             {
                 return Result.Failure(new Error("Validation.UserId", "UserId cannot be null or empty", 400));
-            }
+        }
 
             if (string.IsNullOrWhiteSpace(clubId))
-            {
+        {
                 return Result.Failure(new Error("Validation.ClubId", "ClubId cannot be null or empty", 400));
-            }
+        }
 
             return Result.Success();
-        }
+    }
 
         /// <summary>
         /// Validates that the date range is valid and within acceptable bounds.
         /// </summary>
         private static Result ValidateDateRange(DateTime startDate, DateTime endDate)
-        {
+    {
             var utcStart = startDate.ToUniversalTime();
             var utcEnd = endDate.ToUniversalTime();
 
             if (utcEnd <= utcStart)
-            {
+        {
                 return Result.Failure(new Error(
                     "Validation.DateRange", "EndDate must be after StartDate", 400));
             }
@@ -624,9 +647,9 @@ namespace Sportiva.Services.Implementation
             // If within non-refundable period (last N days), no refund
             var daysUntilExpiration = (subscription.EndDate - now).Days;
             if (daysUntilExpiration <= NonRefundablePeriodDays)
-            {
+        {
                 return 0m;
-            }
+        }
 
             // Calculate daily rate
             var totalDays = (subscription.EndDate.Date - subscription.StartDate.Date).Days + 1;
@@ -637,13 +660,13 @@ namespace Sportiva.Services.Implementation
             var refund = dailyRate * remainingDaysBeforeNonRefundable;
 
             return Math.Max(0, Math.Round(refund, 2)); // Floor at 0, round to 2 decimals
-        }
+    }
 
         /// <summary>
         /// Maps a ClubSubscription entity to ClubSubscriptionResponse DTO (synchronous).
         /// </summary>
         private ClubSubscriptionResponse MapToResponse(ClubSubscription subscription)
-        {
+    {
             var lastPayment = subscription.Payments
                 .OrderByDescending(p => p.PaidAt)
                 .FirstOrDefault();
@@ -691,7 +714,7 @@ namespace Sportiva.Services.Implementation
         {
             // Reload with all navigation properties to ensure they're loaded
             var loaded = await _context.ClubSubscriptions
-                .AsNoTracking()
+            .AsNoTracking()
                 .Include(s => s.Club)
                 .Include(s => s.Plan)
                 .Include(s => s.Payments)

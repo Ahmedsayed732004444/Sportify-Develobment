@@ -4,7 +4,7 @@ public record SubscriptionPlanResponse(
     string    PlanId,
     string    Name,
     string?   Description,
-    decimal   MonthlyPrice,
+    decimal   Price,
     int       MaxCourts,
     bool      IsActive,
     DateTime? ExpiresAt,

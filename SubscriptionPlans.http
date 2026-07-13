@@ -1,0 +1,57 @@
+@Host = http://localhost:5250
+@Token = YOUR_JWT_TOKEN_HERE
+
+### 1. Authenticate / Login to get Token
+POST {{Host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "sayed732004444@gmail.com",
+  "password": "YOUR_ADMIN_PASSWORD"
+}
+
+### 2. Get All Subscription Plans
+GET {{Host}}/subscription-plans
+Accept: application/json
+
+### 3. Create Subscription Plan with Custom Dynamic Data
+# Note: ClubId must belong to an existing active club in your database.
+# PlanId is the unique identifier (GUID or string) you want to assign to this plan.
+POST {{Host}}/subscription-plans
+Authorization: Bearer {{Token}}
+Content-Type: application/json
+
+{
+  "clubId": "0191a4b6-c4fc-752e-9d95-40b30fa7a9b6",
+  "planId": "plan-premium-100",
+  "startDate": "2026-07-20T00:00:00Z",
+  "endDate": "2027-07-20T00:00:00Z",
+  "name": "VIP Premium Plan",
+  "description": "Dynamic premium plan with unlimited court access and priority booking",
+  "monthlyPrice": 99.99,
+  "maxCourts": 12
+}
+
+### 4. Get the Created Subscription Plan Details
+GET {{Host}}/subscription-plans/plan-premium-100
+Accept: application/json
+
+### 5. Update Subscription Plan with New Data
+PUT {{Host}}/subscription-plans/plan-premium-100
+Authorization: Bearer {{Token}}
+Content-Type: application/json
+
+{
+  "clubId": "0191a4b6-c4fc-752e-9d95-40b30fa7a9b6",
+  "planId": "plan-premium-100",
+  "startDate": "2026-07-20T00:00:00Z",
+  "endDate": "2027-12-31T23:59:59Z",
+  "name": "Updated VIP Plan",
+  "description": "Updated description with new price and court limits",
+  "monthlyPrice": 120.00,
+  "maxCourts": 15
+}
+
+### 6. Delete / Archive the Subscription Plan
+DELETE {{Host}}/subscription-plans/plan-premium-100
+Authorization: Bearer {{Token}}
