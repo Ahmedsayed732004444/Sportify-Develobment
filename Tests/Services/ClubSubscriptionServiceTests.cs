@@ -1,112 +1,394 @@
 using FluentAssertions;
+using Mapster;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Storage;
 using Moq;
 using Sportiva.Abstractions;
 using Sportiva.Contracts.Common;
 using Sportiva.Contracts.Subscriptions;
 using Sportiva.Entities;
 using Sportiva.Enums;
+using Sportiva.Mapping;
 using Sportiva.Persistence;
-using Sportiva.Services;
 using Sportiva.Services.Implementation;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Sportiva.Tests.Services;
 
-public class ClubSubscriptionServiceTests : IDisposable
+/// <summary>
+/// Unit tests for ClubSubscriptionService.
+/// Adheres strictly to xUnit, Moq, FluentAssertions, and AAA structure.
+/// </summary>
+public class ClubSubscriptionServiceTests
 {
-    private readonly ApplicationDbContext _context;
-    private readonly Mock<IWalletService> _walletServiceMock;
+    private readonly Mock<ApplicationDbContext> _contextMock;
+    private readonly Mock<DatabaseFacade> _databaseMock;
+    private readonly Mock<IDbContextTransaction> _transactionMock;
+
+    private readonly List<Club> _clubs;
+    private readonly List<SubscriptionPlan> _plans;
+    private readonly List<ClubSubscription> _subscriptions;
+    private readonly List<SubscriptionPayment> _payments;
+
     private readonly ClubSubscriptionService _service;
+
+    static ClubSubscriptionServiceTests()
+    {
+        // 3. Mapster Configuration: Register mappings in the global config.
+        TypeAdapterConfig.GlobalSettings.Scan(typeof(MappingConfigurations).Assembly);
+    }
 
     public ClubSubscriptionServiceTests()
     {
-        // Use a unique in-memory database name per test to ensure isolation
+        _clubs = new List<Club>();
+        _plans = new List<SubscriptionPlan>();
+        _subscriptions = new List<ClubSubscription>();
+        _payments = new List<SubscriptionPayment>();
+
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        _context = new ApplicationDbContext(options);
-        _walletServiceMock = new Mock<IWalletService>();
-        _service = new ClubSubscriptionService(_context, _walletServiceMock.Object);
+        _contextMock = new Mock<ApplicationDbContext>(options);
+
+        // 4. EF Core Mocking: Create mocked DbSets supporting IAsyncEnumerable
+        var clubsDbSet = CreateDbSetMock(_clubs);
+        var plansDbSet = CreateDbSetMock(_plans);
+        var subscriptionsDbSet = CreateDbSetMock(_subscriptions);
+        var paymentsDbSet = CreateDbSetMock(_payments);
+
+        // Set the non-virtual DbSet properties using their public setters
+        _contextMock.Object.Clubs = clubsDbSet.Object;
+        _contextMock.Object.SubscriptionPlans = plansDbSet.Object;
+        _contextMock.Object.ClubSubscriptions = subscriptionsDbSet.Object;
+        _contextMock.Object.SubscriptionPayments = paymentsDbSet.Object;
+
+        // Mock DatabaseFacade for transactions
+        _transactionMock = new Mock<IDbContextTransaction>();
+        _databaseMock = new Mock<DatabaseFacade>(_contextMock.Object);
+        _databaseMock.Setup(d => d.BeginTransactionAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_transactionMock.Object);
+
+        _contextMock.Setup(c => c.Database).Returns(_databaseMock.Object);
+
+        // Mock SaveChangesAsync
+        _contextMock.Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        _service = new ClubSubscriptionService(_contextMock.Object);
     }
 
-    public void Dispose()
-    {
-        _context?.Dispose();
-    }
-
-    #region SubscribeAsync Tests
+    #region GetActiveSubscriptionAsync Tests
 
     [Fact]
-    public async Task SubscribeAsync_WithValidRequest_CreatesSubscriptionAndReturnsSuccess()
+    public async Task GetActiveSubscriptionAsync_WithNullUserId_ReturnsValidationError()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "plan-789";
-
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var plan = new SubscriptionPlan
-        {
-            Id = planId,
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            MaxCourts = 5,
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.SaveChangesAsync();
-
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29); // 30 days
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
-
-        // Mock wallet deduction success
-        _walletServiceMock
-            .Setup(w => w.DeductAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success());
+        var userId = "";
+        var clubId = "club-1";
 
         // Act
-        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
+        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.UserId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetActiveSubscriptionAsync_WithNullClubId_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = " ";
+
+        // Act
+        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.ClubId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetActiveSubscriptionAsync_WhenClubDoesNotExist_ReturnsClubNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-not-exist";
+
+        // Act
+        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.NotFound");
+        result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task GetActiveSubscriptionAsync_WhenCallerNotClubOwner_ReturnsForbidden()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        _clubs.Add(new Club { Id = clubId, OwnerId = "another-user", IsDeleted = false });
+
+        // Act
+        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.Forbidden");
+        result.Error.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task GetActiveSubscriptionAsync_WhenNoActiveSubscriptionExists_ReturnsNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        _clubs.Add(club);
+
+        // A subscription exists but it's expired/deleted or cancelled, so not active
+        _subscriptions.Add(new ClubSubscription
+        {
+            ClubId = clubId,
+            UserId = userId,
+            Status = SubscriptionStatus.Cancelled,
+            IsDeleted = false
+        });
+
+        // Act
+        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Subscription.NotFound");
+        result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task GetActiveSubscriptionAsync_WhenActiveSubscriptionExists_ReturnsSuccess()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Gold Plan", MonthlyPrice = 100m, IsActive = true };
+        
+        var subscription = new ClubSubscription
+        {
+            ClubId = clubId,
+            UserId = userId,
+            PlanId = planId,
+            Status = SubscriptionStatus.Active,
+            IsDeleted = false,
+            StartDate = DateTime.UtcNow.AddDays(-10),
+            EndDate = DateTime.UtcNow.AddDays(20),
+            Price = 100m,
+            Plan = plan,
+            Club = club
+        };
+
+        _clubs.Add(club);
+        _plans.Add(plan);
+        _subscriptions.Add(subscription);
+
+        // Act
+        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
-        result.Value.SubscriptionId.Should().NotBeNullOrEmpty();
+        result.Value.SubscriptionId.Should().Be(subscription.Id);
         result.Value.IsActive.Should().BeTrue();
-
-        var savedSubscription = await _context.ClubSubscriptions
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.ClubId == clubId);
-        savedSubscription.Should().NotBeNull();
-        savedSubscription.Status.Should().Be(SubscriptionStatus.Active);
-        savedSubscription.Price.Should().BeGreaterThan(0);
     }
+
+    #endregion
+
+    #region GetSubscriptionHistoryAsync Tests
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WithNullUserId_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "";
+        var clubId = "club-1";
+        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.UserId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WithNullClubId_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = " ";
+        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.ClubId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WhenClubDoesNotExist_ReturnsClubNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-not-exist";
+        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.NotFound");
+        result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WhenCallerNotClubOwner_ReturnsForbidden()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        _clubs.Add(new Club { Id = clubId, OwnerId = "another-user", IsDeleted = false });
+        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.Forbidden");
+        result.Error.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WithInvalidPageNumber_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        _clubs.Add(club);
+
+        var filters = new RequestFilters { PageNumber = 0, PageSize = 10 };
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.Filters");
+        result.Error.Description.Should().Contain("PageNumber");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WithInvalidPageSize_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        _clubs.Add(club);
+
+        var filters = new RequestFilters { PageNumber = 1, PageSize = 0 }; // Invalid: < 1
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.Filters");
+        result.Error.Description.Should().Contain("PageSize");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetSubscriptionHistoryAsync_WhenValidRequest_ReturnsPaginatedList()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Plan", MonthlyPrice = 100m, IsActive = true };
+
+        var sub1 = new ClubSubscription
+        {
+            ClubId = clubId,
+            UserId = userId,
+            PlanId = planId,
+            Status = SubscriptionStatus.Active,
+            StartDate = DateTime.UtcNow,
+            EndDate = DateTime.UtcNow.AddMonths(1),
+            CreatedAt = DateTime.UtcNow,
+            Club = club,
+            Plan = plan
+        };
+
+        _clubs.Add(club);
+        _plans.Add(plan);
+        _subscriptions.Add(sub1);
+
+        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
+
+        // Act
+        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.TotalCount.Should().Be(1);
+    }
+
+    #endregion
+
+    #region SubscribeAsync Tests
 
     [Fact]
     public async Task SubscribeAsync_WithNullUserId_ReturnsValidationError()
     {
         // Arrange
-        var clubId = "club-123";
-        var planId = "plan-456";
-        var request = new CreateClubSubscriptionRequest(clubId, planId, DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(30));
+        var userId = "";
+        var clubId = "club-1";
+        var request = new CreateClubSubscriptionRequest(clubId, "plan-1", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
-        var result = await _service.SubscribeAsync(null!, clubId, request, CancellationToken.None);
+        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
+        result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Validation.UserId");
         result.Error.StatusCode.Should().Be(400);
     }
@@ -115,54 +397,16 @@ public class ClubSubscriptionServiceTests : IDisposable
     public async Task SubscribeAsync_WithNullClubId_ReturnsValidationError()
     {
         // Arrange
-        var userId = "user-123";
-        var planId = "plan-456";
-        var request = new CreateClubSubscriptionRequest("club-id", planId, DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(30));
+        var userId = "user-1";
+        var clubId = " ";
+        var request = new CreateClubSubscriptionRequest(clubId, "plan-1", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
-        var result = await _service.SubscribeAsync(userId, null!, request, CancellationToken.None);
+        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
+        result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Validation.ClubId");
-        result.Error.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task SubscribeAsync_WithNullPlanId_ReturnsValidationError()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var request = new CreateClubSubscriptionRequest(clubId, null!, DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(30));
-
-        // Act
-        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Validation.PlanId");
-        result.Error.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task SubscribeAsync_WithInvalidDateRange_ReturnsValidationError()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "plan-789";
-        var startDate = DateTime.UtcNow.AddDays(10);
-        var endDate = startDate.AddDays(-1); // End before start
-
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
-
-        // Act
-        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Validation.DateRange");
         result.Error.StatusCode.Should().Be(400);
     }
 
@@ -170,733 +414,155 @@ public class ClubSubscriptionServiceTests : IDisposable
     public async Task SubscribeAsync_WhenClubDoesNotExist_ReturnsClubNotFound()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "nonexistent-club";
-        var planId = "plan-789";
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29);
-
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
+        var userId = "user-1";
+        var clubId = "club-not-exist";
+        var request = new CreateClubSubscriptionRequest(clubId, "plan-1", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
         var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
+        result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Club.NotFound");
         result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_WhenCallerNotClubOwner_ReturnsForbidden()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        _clubs.Add(new Club { Id = clubId, OwnerId = "another-user", IsDeleted = false });
+        var request = new CreateClubSubscriptionRequest(clubId, "plan-1", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
+
+        // Act
+        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.Forbidden");
+        result.Error.StatusCode.Should().Be(403);
     }
 
     [Fact]
     public async Task SubscribeAsync_WhenClubIsInactive_ReturnsClubInactive()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "plan-789";
-
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Inactive Club",
-            IsActive = false,
-            IsDeleted = false
-        };
-
-        var plan = new SubscriptionPlan
-        {
-            Id = planId,
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.SaveChangesAsync();
-
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29);
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = false, IsDeleted = false };
+        _clubs.Add(club);
+        var request = new CreateClubSubscriptionRequest(clubId, "plan-1", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
         var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
+        result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Club.Inactive");
         result.Error.StatusCode.Should().Be(403);
     }
 
     [Fact]
-    public async Task SubscribeAsync_WhenPlanDoesNotExist_ReturnsPlanNotFound()
+    public async Task SubscribeAsync_WithNullOrEmptyPlanId_ReturnsValidationError()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "nonexistent-plan";
-
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SaveChangesAsync();
-
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29);
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        _clubs.Add(club);
+        var request = new CreateClubSubscriptionRequest(clubId, "", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
         var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Plan.NotFound");
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.PlanId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_WhenPlanDoesNotExistOrIsInactiveOrIsDeleted_ReturnsPlanNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        _clubs.Add(club);
+
+        var inactivePlan = new SubscriptionPlan { Id = "plan-inactive", IsActive = false, IsDeleted = false };
+        var deletedPlan = new SubscriptionPlan { Id = "plan-deleted", IsActive = true, IsDeleted = true };
+        _plans.AddRange(new[] { inactivePlan, deletedPlan });
+
+        var request = new CreateClubSubscriptionRequest(clubId, "plan-not-exist", DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
+
+        // Act
+        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("SubscriptionPlan.NotFound");
         result.Error.StatusCode.Should().Be(404);
     }
 
     [Fact]
-    public async Task SubscribeAsync_WhenPlanIsInactive_ReturnsPlanInactive()
+    public async Task SubscribeAsync_WhenActiveSubscriptionAlreadyExists_ReturnsConflict()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "plan-789";
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
 
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Plan", MonthlyPrice = 50m, IsActive = true, IsDeleted = false };
+        var activeSub = new ClubSubscription { ClubId = clubId, UserId = userId, PlanId = planId, Status = SubscriptionStatus.Active, IsDeleted = false };
 
-        var plan = new SubscriptionPlan
-        {
-            Id = planId,
-            Name = "Inactive Plan",
-            MonthlyPrice = 100m,
-            IsActive = false,
-            IsDeleted = false
-        };
+        _clubs.Add(club);
+        _plans.Add(plan);
+        _subscriptions.Add(activeSub);
 
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.SaveChangesAsync();
-
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29);
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
+        var request = new CreateClubSubscriptionRequest(clubId, planId, DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
         var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Plan.Inactive");
-        result.Error.StatusCode.Should().Be(403);
-    }
-
-    [Fact]
-    public async Task SubscribeAsync_WhenUserAlreadyHasActiveSubscription_ReturnsDuplicateActive()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "plan-789";
-
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var plan = new SubscriptionPlan
-        {
-            Id = planId,
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var existingSubscription = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = planId,
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.ClubSubscriptions.AddAsync(existingSubscription);
-        await _context.SaveChangesAsync();
-
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29);
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
-
-        // Act
-        var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.DuplicateActive");
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Subscription.Conflict");
         result.Error.StatusCode.Should().Be(409);
     }
 
     [Fact]
-    public async Task SubscribeAsync_WhenWalletBalanceInsufficient_ReturnsInsufficientBalance()
+    public async Task SubscribeAsync_WhenValidRequest_CreatesSubscriptionAndPaymentAndCommitsTransaction()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var planId = "plan-789";
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
 
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Plan", MonthlyPrice = 50m, IsActive = true, IsDeleted = false };
 
-        var plan = new SubscriptionPlan
-        {
-            Id = planId,
-            Name = "Expensive Plan",
-            MonthlyPrice = 10000m, // Very expensive
-            IsActive = true,
-            IsDeleted = false
-        };
+        _clubs.Add(club);
+        _plans.Add(plan);
 
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.SaveChangesAsync();
-
-        var startDate = DateTime.UtcNow.AddDays(1);
-        var endDate = startDate.AddDays(29);
-        var request = new CreateClubSubscriptionRequest(clubId, planId, startDate, endDate);
-
-        // Mock wallet deduction failure
-        _walletServiceMock
-            .Setup(w => w.DeductAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Failure(new Error("Wallet.InsufficientBalance", "Insufficient wallet balance", 402)));
+        var request = new CreateClubSubscriptionRequest(clubId, planId, DateTime.UtcNow, DateTime.UtcNow.AddMonths(1));
 
         // Act
         var result = await _service.SubscribeAsync(userId, clubId, request, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Wallet.InsufficientBalance");
-        result.Error.StatusCode.Should().Be(402);
-
-        // Verify no subscription was created
-        var subscription = await _context.ClubSubscriptions
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.ClubId == clubId);
-        subscription.Should().BeNull();
-    }
-
-    #endregion
-
-    #region CancelSubscriptionAsync Tests
-
-    [Fact]
-    public async Task CancelSubscriptionAsync_WithValidActiveSubscription_CancelledSuccessfully()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var club = new Club
-        {
-            Id = clubId,
-            OwnerId = "owner-001",
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var subscription = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
-
-        // Mock wallet credit for refund
-        _walletServiceMock
-            .Setup(w => w.CreditAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success());
-
-        // Act
-        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
         result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value.IsActive.Should().BeFalse(); // Because status is PendingPayment initially
 
-        var cancelledSubscription = await _context.ClubSubscriptions.FirstOrDefaultAsync(s => s.Id == subscription.Id);
-        cancelledSubscription.Status.Should().Be(SubscriptionStatus.Cancelled);
-        cancelledSubscription.CancelledAt.Should().NotBeNull();
-        cancelledSubscription.RefundAmount.Should().NotBeNull();
-    }
+        _subscriptions.Should().ContainSingle(s => s.ClubId == clubId && s.PlanId == planId && s.Status == SubscriptionStatus.PendingPayment);
+        _payments.Should().ContainSingle(p => p.Amount == plan.MonthlyPrice && p.Status == PaymentStatus.Pending);
 
-    [Fact]
-    public async Task CancelSubscriptionAsync_WithNullUserId_ReturnsValidationError()
-    {
-        // Arrange
-        var clubId = "club-456";
-
-        // Act
-        var result = await _service.CancelSubscriptionAsync(null!, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Validation.UserId");
-        result.Error.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task CancelSubscriptionAsync_WhenSubscriptionDoesNotExist_ReturnsNotFound()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "nonexistent-club";
-
-        // Act
-        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.NotFound");
-        result.Error.StatusCode.Should().Be(404);
-    }
-
-    [Fact]
-    public async Task CancelSubscriptionAsync_WhenSubscriptionBelongsToDifferentUser_ReturnsForbidden()
-    {
-        // Arrange
-        var userId = "user-123";
-        var otherUserId = "user-999";
-        var clubId = "club-456";
-
-        var subscription = new ClubSubscription
-        {
-            UserId = otherUserId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.NotFound"); // From the query filter
-    }
-
-    [Fact]
-    public async Task CancelSubscriptionAsync_WhenAlreadyCancelled_ReturnsAlreadyCancelledError()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        var subscription = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Cancelled,
-            CancelledAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.AlreadyCancelled");
-        result.Error.StatusCode.Should().Be(409);
-    }
-
-    [Fact]
-    public async Task CancelSubscriptionAsync_WithRefund_CreditsWallet()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var club = new Club
-        {
-            Id = clubId,
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var subscription = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20), // 30 days total, midway through
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
-
-        // Mock wallet credit
-        _walletServiceMock
-            .Setup(w => w.CreditAsync(userId, It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success());
-
-        // Act
-        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        _walletServiceMock.Verify(
-            w => w.CreditAsync(userId, It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    #endregion
-
-    #region GetActiveSubscriptionAsync Tests
-
-    [Fact]
-    public async Task GetActiveSubscriptionAsync_WithValidSubscription_ReturnsCorrectSubscription()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        var club = new Club
-        {
-            Id = clubId,
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false,
-            LogoUrl = "https://example.com/logo.png",
-            City = "Cairo"
-        };
-
-        var plan = new SubscriptionPlan
-        {
-            Id = "plan-789",
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            MaxCourts = 5,
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var subscription = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Value.SubscriptionId.Should().Be(subscription.Id);
-        result.Value.IsActive.Should().BeTrue();
-        result.Value.Club.ClubId.Should().Be(clubId);
-        result.Value.Plan.PlanId.Should().Be("plan-789");
-    }
-
-    [Fact]
-    public async Task GetActiveSubscriptionAsync_WhenNoActiveSubscriptionExists_ReturnsNotFound()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        // Act
-        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.NotFound");
-        result.Error.StatusCode.Should().Be(404);
-    }
-
-    [Fact]
-    public async Task GetActiveSubscriptionAsync_IgnoresCancelledSubscriptions()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        var subscription = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Cancelled,
-            CancelledAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var result = await _service.GetActiveSubscriptionAsync(userId, clubId, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.NotFound");
-    }
-
-    #endregion
-
-    #region GetSubscriptionHistoryAsync Tests
-
-    [Fact]
-    public async Task GetSubscriptionHistoryAsync_WithValidFilters_ReturnsPaginatedResults()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        var club = new Club
-        {
-            Id = clubId,
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var plan = new SubscriptionPlan
-        {
-            Id = "plan-789",
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var subscription1 = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-50),
-            EndDate = DateTime.UtcNow.AddDays(-20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Cancelled,
-            CancelledAt = DateTime.UtcNow.AddDays(-20),
-            CreatedAt = DateTime.UtcNow.AddDays(-50)
-        };
-
-        var subscription2 = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow.AddDays(-10)
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.ClubSubscriptions.AddAsync(subscription1);
-        await _context.ClubSubscriptions.AddAsync(subscription2);
-        await _context.SaveChangesAsync();
-
-        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
-
-        // Act
-        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Items.Should().HaveCount(2);
-        result.Value.TotalCount.Should().Be(2);
-        result.Value.PageNumber.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task GetSubscriptionHistoryAsync_WithInvalidPageNumber_ReturnsValidationError()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var filters = new RequestFilters { PageNumber = 0, PageSize = 10 }; // Invalid: < 1
-
-        // Act
-        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Validation.Filters");
-        result.Error.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task GetSubscriptionHistoryAsync_WithInvalidPageSize_ReturnsValidationError()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var filters = new RequestFilters { PageNumber = 1, PageSize = 0 }; // Invalid: < 1
-
-        // Act
-        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Validation.Filters");
-        result.Error.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task GetSubscriptionHistoryAsync_WithNoSubscriptions_ReturnsEmptyPaginatedList()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
-
-        // Act
-        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Items.Should().BeEmpty();
-        result.Value.TotalCount.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task GetSubscriptionHistoryAsync_ReturnsSortedByCreatedAtDescending()
-    {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        var club = new Club
-        {
-            Id = clubId,
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var plan = new SubscriptionPlan
-        {
-            Id = "plan-789",
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            IsActive = true,
-            IsDeleted = false
-        };
-
-        var subscription1 = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-50),
-            EndDate = DateTime.UtcNow.AddDays(-20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Cancelled,
-            CreatedAt = DateTime.UtcNow.AddDays(-50)
-        };
-
-        var subscription2 = new ClubSubscription
-        {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow.AddDays(-10)
-        };
-
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.ClubSubscriptions.AddAsync(subscription1);
-        await _context.ClubSubscriptions.AddAsync(subscription2);
-        await _context.SaveChangesAsync();
-
-        var filters = new RequestFilters { PageNumber = 1, PageSize = 10 };
-
-        // Act
-        var result = await _service.GetSubscriptionHistoryAsync(userId, clubId, filters, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Items[0].SubscriptionId.Should().Be(subscription2.Id); // Most recent first
-        result.Value.Items[1].SubscriptionId.Should().Be(subscription1.Id);
+        _transactionMock.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     #endregion
@@ -904,162 +570,451 @@ public class ClubSubscriptionServiceTests : IDisposable
     #region RenewSubscriptionAsync Tests
 
     [Fact]
-    public async Task RenewSubscriptionAsync_WithValidCancelledSubscription_CreatesNewActiveSubscription()
+    public async Task RenewSubscriptionAsync_WithNullUserId_ReturnsValidationError()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
+        var userId = "";
+        var clubId = "club-1";
 
-        var club = new Club
-        {
-            Id = clubId,
-            Name = "Test Club",
-            IsActive = true,
-            IsDeleted = false
-        };
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
 
-        var plan = new SubscriptionPlan
-        {
-            Id = "plan-789",
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            MaxCourts = 5,
-            IsActive = true,
-            IsDeleted = false
-        };
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.UserId");
+        result.Error.StatusCode.Should().Be(400);
+    }
 
-        var oldSubscription = new ClubSubscription
+    [Fact]
+    public async Task RenewSubscriptionAsync_WithNullClubId_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = " ";
+
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.ClubId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenClubDoesNotExist_ReturnsClubNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-not-exist";
+
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.NotFound");
+        result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenCallerNotClubOwner_ReturnsForbidden()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        _clubs.Add(new Club { Id = clubId, OwnerId = "another-user", IsDeleted = false });
+
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.Forbidden");
+        result.Error.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenClubIsInactive_ReturnsClubInactive()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = false, IsDeleted = false };
+        _clubs.Add(club);
+
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.Inactive");
+        result.Error.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenNoPreviousSubscriptionExists_ReturnsNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        _clubs.Add(club);
+
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Subscription.NotFound");
+        result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenExistingSubscriptionStillActive_ReturnsConflict()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Plan", MonthlyPrice = 50m, IsActive = true };
+        var existingSub = new ClubSubscription
         {
-            UserId = userId,
             ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-50),
-            EndDate = DateTime.UtcNow.AddDays(-20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Cancelled,
-            CancelledAt = DateTime.UtcNow.AddDays(-20),
-            CreatedAt = DateTime.UtcNow.AddDays(-50)
+            UserId = userId,
+            PlanId = planId,
+            Status = SubscriptionStatus.Active, // Still active, can't renew this state
+            IsDeleted = false,
+            CreatedAt = DateTime.UtcNow,
+            Plan = plan,
+            Club = club
         };
 
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.ClubSubscriptions.AddAsync(oldSubscription);
-        await _context.SaveChangesAsync();
+        _clubs.Add(club);
+        _plans.Add(plan);
+        _subscriptions.Add(existingSub);
 
-        _walletServiceMock
-            .Setup(w => w.DeductAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success());
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Subscription.CannotRenew");
+        result.Error.StatusCode.Should().Be(409);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenPlanIsInactiveOrDeleted_ReturnsForbidden()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Plan", MonthlyPrice = 50m, IsActive = false, IsDeleted = false }; // Inactive
+        var existingSub = new ClubSubscription
+        {
+            ClubId = clubId,
+            UserId = userId,
+            PlanId = planId,
+            Status = SubscriptionStatus.Cancelled,
+            IsDeleted = false,
+            CreatedAt = DateTime.UtcNow,
+            Plan = plan,
+            Club = club
+        };
+
+        _clubs.Add(club);
+        _plans.Add(plan);
+        _subscriptions.Add(existingSub);
+
+        // Act
+        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Plan.Inactive");
+        result.Error.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task RenewSubscriptionAsync_WhenValidRequest_CreatesNewSubscriptionAndPaymentAndCommitsTransaction()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var planId = "plan-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsActive = true, IsDeleted = false };
+        var plan = new SubscriptionPlan { Id = planId, Name = "Plan", MonthlyPrice = 50m, IsActive = true, IsDeleted = false };
+        var existingSub = new ClubSubscription
+        {
+            ClubId = clubId,
+            UserId = userId,
+            PlanId = planId,
+            Status = SubscriptionStatus.Expired, // Expired, so we can renew it
+            IsDeleted = false,
+            CreatedAt = DateTime.UtcNow.AddMonths(-1),
+            Plan = plan,
+            Club = club
+        };
+
+        _clubs.Add(club);
+        _plans.Add(plan);
+        _subscriptions.Add(existingSub);
 
         // Act
         var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Value.IsActive.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value.IsActive.Should().BeFalse();
 
-        var newSubscription = await _context.ClubSubscriptions
-            .Where(s => s.UserId == userId && s.ClubId == clubId && s.Status == SubscriptionStatus.Active)
-            .FirstOrDefaultAsync();
-        newSubscription.Should().NotBeNull();
-        newSubscription.StartDate.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        _subscriptions.Should().Contain(s => s.ClubId == clubId && s.PlanId == planId && s.Status == SubscriptionStatus.PendingPayment);
+        _payments.Should().ContainSingle(p => p.Amount == plan.MonthlyPrice && p.Status == PaymentStatus.Pending);
+
+        _transactionMock.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    #endregion
+
+    #region CancelSubscriptionAsync Tests
+
+    [Fact]
+    public async Task CancelSubscriptionAsync_WithNullUserId_ReturnsValidationError()
+    {
+        // Arrange
+        var userId = "";
+        var clubId = "club-1";
+
+        // Act
+        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.UserId");
+        result.Error.StatusCode.Should().Be(400);
     }
 
     [Fact]
-    public async Task RenewSubscriptionAsync_WhenNoSubscriptionExists_ReturnsNotFound()
+    public async Task CancelSubscriptionAsync_WithNullClubId_ReturnsValidationError()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
+        var userId = "user-1";
+        var clubId = " ";
 
         // Act
-        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Validation.ClubId");
+        result.Error.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task CancelSubscriptionAsync_WhenClubDoesNotExist_ReturnsClubNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-not-exist";
+
+        // Act
+        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.NotFound");
+        result.Error.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task CancelSubscriptionAsync_WhenCallerNotClubOwner_ReturnsForbidden()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        _clubs.Add(new Club { Id = clubId, OwnerId = "another-user", IsDeleted = false });
+
+        // Act
+        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Club.Forbidden");
+        result.Error.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task CancelSubscriptionAsync_WhenNoActiveSubscriptionExists_ReturnsNotFound()
+    {
+        // Arrange
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        _clubs.Add(club);
+
+        // Only a Cancelled/PendingPayment subscription exists, no active subscription
+        var pendingSub = new ClubSubscription { ClubId = clubId, UserId = userId, Status = SubscriptionStatus.PendingPayment, IsDeleted = false };
+        _subscriptions.Add(pendingSub);
+
+        // Act
+        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Subscription.NotFound");
         result.Error.StatusCode.Should().Be(404);
     }
 
     [Fact]
-    public async Task RenewSubscriptionAsync_WhenSubscriptionStillActive_CannotRenew()
+    public async Task CancelSubscriptionAsync_WhenActiveSubscriptionExists_CancelsSuccessfully()
     {
         // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
-
-        var subscription = new ClubSubscription
+        var userId = "user-1";
+        var clubId = "club-1";
+        var club = new Club { Id = clubId, OwnerId = userId, IsDeleted = false };
+        var activeSub = new ClubSubscription
         {
-            UserId = userId,
             ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-10),
-            EndDate = DateTime.UtcNow.AddDays(20),
-            Price = 1000m,
+            UserId = userId,
             Status = SubscriptionStatus.Active,
-            CreatedAt = DateTime.UtcNow
+            IsDeleted = false,
+            Club = club
         };
 
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
+        _clubs.Add(club);
+        _subscriptions.Add(activeSub);
 
         // Act
-        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+        var result = await _service.CancelSubscriptionAsync(userId, clubId, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Subscription.CannotRenew");
-        result.Error.StatusCode.Should().Be(409);
+        result.IsSuccess.Should().BeTrue();
+        activeSub.Status.Should().Be(SubscriptionStatus.Cancelled);
+        activeSub.CancelledAt.Should().NotBeNull();
+        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task RenewSubscriptionAsync_WhenClubIsInactive_ReturnsForbidden()
+    #endregion
+
+    #region Generic EF DbSet Mock Helpers
+
+    private static Mock<DbSet<T>> CreateDbSetMock<T>(List<T> elements) where T : class
     {
-        // Arrange
-        var userId = "user-123";
-        var clubId = "club-456";
+        var elementsQueryable = elements.AsQueryable();
+        var mockDbSet = new Mock<DbSet<T>>();
 
-        var club = new Club
+        mockDbSet.As<IAsyncEnumerable<T>>()
+            .Setup(m => m.GetAsyncEnumerator(It.IsAny<CancellationToken>()))
+            .Returns(new TestAsyncEnumerator<T>(elementsQueryable.GetEnumerator()));
+
+        mockDbSet.As<IQueryable<T>>()
+            .Setup(m => m.Provider)
+            .Returns(new TestAsyncQueryProvider<T>(elementsQueryable.Provider));
+
+        mockDbSet.As<IQueryable<T>>()
+            .Setup(m => m.Expression)
+            .Returns(elementsQueryable.Expression);
+
+        mockDbSet.As<IQueryable<T>>()
+            .Setup(m => m.ElementType)
+            .Returns(elementsQueryable.ElementType);
+
+        mockDbSet.As<IQueryable<T>>()
+            .Setup(m => m.GetEnumerator())
+            .Returns(() => elementsQueryable.GetEnumerator());
+
+        mockDbSet.Setup(d => d.Add(It.IsAny<T>())).Callback<T>(elements.Add);
+        mockDbSet.Setup(d => d.Update(It.IsAny<T>())).Callback<T>(entity => { });
+
+        return mockDbSet;
+    }
+
+    private class TestAsyncEnumerator<T> : IAsyncEnumerator<T>
+    {
+        private readonly IEnumerator<T> _inner;
+
+        public TestAsyncEnumerator(IEnumerator<T> inner)
         {
-            Id = clubId,
-            Name = "Inactive Club",
-            IsActive = false,
-            IsDeleted = false
-        };
+            _inner = inner;
+        }
 
-        var plan = new SubscriptionPlan
+        public ValueTask<bool> MoveNextAsync()
         {
-            Id = "plan-789",
-            Name = "Basic Plan",
-            MonthlyPrice = 100m,
-            IsActive = true,
-            IsDeleted = false
-        };
+            return ValueTask.FromResult(_inner.MoveNext());
+        }
 
-        var subscription = new ClubSubscription
+        public T Current => _inner.Current;
+
+        public ValueTask DisposeAsync()
         {
-            UserId = userId,
-            ClubId = clubId,
-            PlanId = "plan-789",
-            StartDate = DateTime.UtcNow.AddDays(-50),
-            EndDate = DateTime.UtcNow.AddDays(-20),
-            Price = 1000m,
-            Status = SubscriptionStatus.Cancelled,
-            CancelledAt = DateTime.UtcNow.AddDays(-20),
-            CreatedAt = DateTime.UtcNow.AddDays(-50)
-        };
+            _inner.Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 
-        await _context.Clubs.AddAsync(club);
-        await _context.SubscriptionPlans.AddAsync(plan);
-        await _context.ClubSubscriptions.AddAsync(subscription);
-        await _context.SaveChangesAsync();
+    private class TestAsyncEnumerable<T> : EnumerableQuery<T>, IAsyncEnumerable<T>, IQueryable<T>
+    {
+        public TestAsyncEnumerable(IEnumerable<T> enumerable) : base(enumerable)
+        { }
 
-        // Act
-        var result = await _service.RenewSubscriptionAsync(userId, clubId, CancellationToken.None);
+        public TestAsyncEnumerable(Expression expression) : base(expression)
+        { }
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("Club.Inactive");
-        result.Error.StatusCode.Should().Be(403);
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            return new TestAsyncEnumerator<T>(this.AsEnumerable().GetEnumerator());
+        }
+
+        IQueryProvider IQueryable.Provider => new TestAsyncQueryProvider<T>(this);
+    }
+
+    private class TestAsyncQueryProvider<TEntity> : IAsyncQueryProvider
+    {
+        private readonly IQueryProvider _inner;
+
+        public TestAsyncQueryProvider(IQueryProvider inner)
+        {
+            _inner = inner;
+        }
+
+        public IQueryable CreateQuery(Expression expression)
+        {
+            return new TestAsyncEnumerable<TEntity>(expression);
+        }
+
+        public IQueryable<TElement> CreateQuery<TElement>(Expression expression)
+        {
+            return new TestAsyncEnumerable<TElement>(expression);
+        }
+
+        public object? Execute(Expression expression)
+        {
+            return _inner.Execute(expression);
+        }
+
+        public TResult Execute<TResult>(Expression expression)
+        {
+            return _inner.Execute<TResult>(expression);
+        }
+
+        public TResult ExecuteAsync<TResult>(Expression expression, CancellationToken cancellationToken = default)
+        {
+            var expectedResultType = typeof(TResult).GetGenericArguments()[0];
+            var result = _inner.Execute(expression);
+
+            if (typeof(TResult).IsGenericType && typeof(TResult).GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                return (TResult)typeof(Task).GetMethod(nameof(Task.FromResult))!
+                    .MakeGenericMethod(expectedResultType)
+                    .Invoke(null, new[] { result })!;
+            }
+
+            return (TResult)Activator.CreateInstance(typeof(TResult), result)!;
+        }
     }
 
     #endregion

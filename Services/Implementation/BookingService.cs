@@ -16,18 +16,13 @@ namespace Sportiva.Services.Implementation
     public class BookingService : IBookingService
     {
         private readonly ApplicationDbContext _context;
-        private readonly IWalletService _walletService;
 
-        // Cancellation refund policy constants
-        private const int FullRefundCutoffHours = 24;      // Full refund if cancelled >24 hours before slot start
-        private const int PartialRefundCutoffHours = 1;    // 50% refund if cancelled 1-24 hours before
-        private const decimal PartialRefundPercentage = 0.5m; // Refund percentage in the partial window
-        private const int CancellationBlockedWithinHours = 1; // Block cancellation if <1 hour before (instead of zero refund)
+        // Cancellation policy constants
+        private const int CancellationBlockedWithinHours = 1; // Block cancellation if <1 hour before
 
-        public BookingService(ApplicationDbContext context, IWalletService walletService)
+        public BookingService(ApplicationDbContext context)
         {
             _context = context;
-            _walletService = walletService;
         }
 
         /// <summary>
@@ -110,15 +105,6 @@ namespace Sportiva.Services.Implementation
                 ? timeSlot.Court.PricePerHour
                 : timeSlot.Court.PricePerHour * (timeSlot.EndTime.Hour - timeSlot.StartTime.Hour);
 
-            // Deduct payment from wallet BEFORE creating the booking
-            var deductResult = await _walletService.DeductAsync(
-                userId, bookingPrice, $"Booking.CreateBooking for {timeSlot.Court.Name ?? request.CourtId}", ct);
-
-            if (deductResult.IsFailure)
-            {
-                return Result.Failure<BookingResponse>(deductResult.Error);
-            }
-
             // Create booking in a transaction
             using var transaction = await _context.Database.BeginTransactionAsync(ct);
             try
@@ -131,7 +117,7 @@ namespace Sportiva.Services.Implementation
                     TimeSlotId = request.TimeSlotId,
                     BookingDate = DateTime.UtcNow,
                     Price = bookingPrice,
-                    Status = BookingStatus.Confirmed, // Synchronous wallet charge, so mark as confirmed immediately
+                    Status = BookingStatus.Pending, // Decoupled payment, so starts as Pending
                     IsDeleted = false
                 };
 
@@ -154,21 +140,12 @@ namespace Sportiva.Services.Implementation
                 // Unique index violation: another booking won the race for this slot
                 await transaction.RollbackAsync(ct);
 
-                // Refund the wallet deduction
-                await _walletService.CreditAsync(
-                    userId, bookingPrice, "Booking.CreateBooking race condition refund", ct);
-
                 return Result.Failure<BookingResponse>(new Error(
                     "TimeSlot.AlreadyBooked", "This time slot has already been booked by another customer", 409));
             }
             catch
             {
                 await transaction.RollbackAsync(ct);
-
-                // Refund the wallet deduction on any other failure
-                await _walletService.CreditAsync(
-                    userId, bookingPrice, "Booking.CreateBooking transaction rollback", ct);
-
                 throw;
             }
         }
@@ -371,24 +348,11 @@ namespace Sportiva.Services.Implementation
                     409));
             }
 
-            // Calculate refund amount
-            var refundAmount = CalculateRefund(hoursUntilSlot, booking.Price);
-
             // Update booking to cancelled state
             booking.Status = BookingStatus.Cancelled;
 
             _context.Bookings.Update(booking);
             await _context.SaveChangesAsync(ct);
-
-            // Process refund if applicable
-            if (refundAmount > 0)
-            {
-                await _walletService.CreditAsync(
-                    userId,
-                    refundAmount,
-                    $"Booking.Cancel refund from {booking.Court?.Name ?? booking.CourtId}",
-                    ct);
-            }
 
             return Result.Success();
         }
@@ -676,28 +640,7 @@ namespace Sportiva.Services.Implementation
             return Result.Success(club);
         }
 
-        /// <summary>
-        /// Calculates refund amount based on hours until slot start and refund policy.
-        /// Policy:
-        /// - >24 hours: 100% refund
-        /// - 1-24 hours: 50% refund
-        /// - <1 hour: already blocked by caller, but return 0 if this is somehow called
-        /// </summary>
-        private static decimal CalculateRefund(double hoursUntilSlot, decimal bookingPrice)
-        {
-            if (hoursUntilSlot >= FullRefundCutoffHours)
-            {
-                return bookingPrice; // 100% refund
-            }
 
-            if (hoursUntilSlot >= PartialRefundCutoffHours)
-            {
-                return bookingPrice * PartialRefundPercentage; // 50% refund
-            }
-
-            // Already blocked by caller, but return 0 if somehow reached
-            return 0m;
-        }
 
         /// <summary>
         /// Combines TimeSlot's DateOnly and TimeOnly into a UTC DateTime for comparison.

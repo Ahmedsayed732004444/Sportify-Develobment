@@ -1,4 +1,12 @@
-﻿namespace Sportiva.Mapping;
+using Sportiva.Contracts.Authentication;
+using Sportiva.Contracts.Shared.Enums;
+using Sportiva.Contracts.Shared.Summaries;
+using Sportiva.Contracts.Subscriptions;
+using Sportiva.Entities;
+using Sportiva.Enums;
+using System.Linq;
+
+namespace Sportiva.Mapping;
 
 public class MappingConfigurations : IRegister
 {
@@ -7,18 +15,24 @@ public class MappingConfigurations : IRegister
         config.NewConfig<RegisterRequest, ApplicationUser>()
             .Map(dest => dest.UserName, src => src.Email);
 
-        //config.NewConfig<UserProfile, ProfileResponse>()
-        //    .Map(dest => dest.FullName, src => src.User.FullName);
-        // ✅ ضيف الـ tuple mapping
-        //config.NewConfig<(ApplicationUser User, IEnumerable<string> Roles), UserResponse>()
-        //    .Map(dest => dest.Id, src => src.User.Id)
-        //    .Map(dest => dest.FirstName, src => src.User.FirstName)
-        //    .Map(dest => dest.LastName, src => src.User.LastName)
-        //    .Map(dest => dest.Email, src => src.User.Email)
-        //    .Map(dest => dest.IsDisabled, src => src.User.IsDisabled)
-        //    .Map(dest => dest.Roles, src => src.Roles);
+        // ClubSubscription mapping configurations
+        config.NewConfig<ClubSubscription, ClubSubscriptionResponse>()
+            .Map(dest => dest.SubscriptionId, src => src.Id)
+            .Map(dest => dest.Club, src => src.Club)
+            .Map(dest => dest.Plan, src => src.Plan)
+            .Map(dest => dest.StartDate, src => src.StartDate)
+            .Map(dest => dest.EndDate, src => src.EndDate)
+            .Map(dest => dest.IsActive, src => src.Status == SubscriptionStatus.Active)
+            .Map(dest => dest.PaymentsCount, src => src.Payments.Count)
+            .Map(dest => dest.LastPayment, src => src.Payments
+                .OrderByDescending(p => p.PaidAt)
+                .ThenByDescending(p => p.Id)
+                .FirstOrDefault());
 
+        config.NewConfig<SubscriptionPlan, SubscriptionPlanSummary>()
+            .Map(dest => dest.PlanId, src => src.Id);
 
-
+        config.NewConfig<SubscriptionPayment, SubscriptionPaymentSummary>()
+            .Map(dest => dest.PaymentId, src => src.Id);
     }
-}
+}

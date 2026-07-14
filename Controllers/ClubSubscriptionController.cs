@@ -15,7 +15,7 @@ public class ClubSubscriptionController(IClubSubscriptionService clubSubscriptio
 
     // POST /clubs/{clubId}/subscriptions
     [HttpPost]
-    public async Task<IActionResult> Subscribe(string clubId, [FromBody] CreateClubSubscriptionRequest request, CancellationToken ct)
+    public async Task<IActionResult> Subscribe([FromRoute] string clubId, [FromBody] CreateClubSubscriptionRequest request, CancellationToken ct)
     {
         try
         {
@@ -30,7 +30,7 @@ public class ClubSubscriptionController(IClubSubscriptionService clubSubscriptio
 
     // DELETE /clubs/{clubId}/subscriptions
     [HttpDelete]
-    public async Task<IActionResult> CancelSubscription(string clubId, CancellationToken ct)
+    public async Task<IActionResult> CancelSubscription([FromRoute] string clubId, CancellationToken ct)
     {
         try
         {
@@ -45,7 +45,7 @@ public class ClubSubscriptionController(IClubSubscriptionService clubSubscriptio
 
     // GET /clubs/{clubId}/subscriptions/active
     [HttpGet("active")]
-    public async Task<IActionResult> GetActiveSubscription(string clubId, CancellationToken ct)
+    public async Task<IActionResult> GetActiveSubscription([FromRoute] string clubId, CancellationToken ct)
     {
         try
         {
@@ -60,7 +60,7 @@ public class ClubSubscriptionController(IClubSubscriptionService clubSubscriptio
 
     // GET /clubs/{clubId}/subscriptions/history
     [HttpGet("history")]
-    public async Task<IActionResult> GetSubscriptionHistory(string clubId, [FromQuery] RequestFilters filters, CancellationToken ct)
+    public async Task<IActionResult> GetSubscriptionHistory([FromRoute] string clubId, [FromQuery] RequestFilters filters, CancellationToken ct)
     {
         try
         {
@@ -75,7 +75,7 @@ public class ClubSubscriptionController(IClubSubscriptionService clubSubscriptio
 
     // POST /clubs/{clubId}/subscriptions/renew
     [HttpPost("renew")]
-    public async Task<IActionResult> RenewSubscription(string clubId, CancellationToken ct)
+    public async Task<IActionResult> RenewSubscription([FromRoute] string clubId, CancellationToken ct)
     {
         try
         {

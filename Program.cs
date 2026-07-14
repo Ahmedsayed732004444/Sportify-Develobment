@@ -24,6 +24,27 @@ app.UseSwaggerUI(options =>
 
 app.MapControllers();
 
+// ... (باقي أكواد الـ Middleware السابقة مثل app.MapControllers)
+
+// إنشاء نطاق (Scope) لتشغيل الخدمات لمرة واحدة عند إقلاع السيرفر
+//using (var scope = app.Services.CreateScope())
+//{
+//    var services = scope.ServiceProvider;
+//    try
+//    {
+//        // استدعاء دالة بناء حساب المدير
+//        await AdminSeeder.SeedAdminAsync(services);
+//    }
+//    catch (Exception ex)
+//    {
+//        // تسجيل أي خطأ قد يحدث أثناء العملية
+//        var logger = services.GetRequiredService<ILogger<Program>>();
+//        logger.LogError(ex, "حدث خطأ أثناء إنشاء حساب المدير الافتراضي.");
+//    }
+//}
+
+app.Run();
+
 app.Run();
 
 

@@ -8,6 +8,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Sportiva.Services;
+using Sportiva.Services.Implementation;
 
 namespace Sportiva;
 
@@ -61,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped<ICommentService, CommentService>();
         services.AddScoped<ISubscriptionPlanService, SubscriptionPlanService>();
         services.AddScoped<IClubSubscriptionService, ClubSubscriptionService>();
+        //services.AddIdentity<IdentityUser, IdentityRole>()
+        //        .AddEntityFrameworkStores<ApplicationDbContext>();
         services.AddHttpClient();
         services.AddHttpContextAccessor();
         services.AddBackgroundJobsConfig(configuration);
