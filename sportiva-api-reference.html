@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sportiva — REST API Reference v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0d0f14;
+  --bg2:      #13161d;
+  --bg3:      #1a1e28;
+  --border:   #252935;
+  --border2:  #2e3444;
+  --text:     #c8cdd8;
+  --text2:    #7a8299;
+  --text3:    #444d66;
+  --accent:   #4f8ef7;
+  --accent2:  #2d5fc4;
+  --green:    #3dd68c;
+  --amber:    #f7a84f;
+  --red:      #f06464;
+  --purple:   #a78bfa;
+  --teal:     #38ccc0;
+  --pink:     #f06fac;
+  --GET:      #3dd68c;
+  --POST:     #4f8ef7;
+  --PUT:      #f7a84f;
+  --PATCH:    #f7a84f;
+  --DELETE:   #f06464;
+  --mono:     'IBM Plex Mono', monospace;
+  --display:  'Syne', sans-serif;
+  --body:     'DM Sans', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.6;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* SIDEBAR */
+#sidebar {
+  width: 230px;
+  min-width: 230px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+.sidebar-header {
+  padding: 22px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 2;
+}
+.sidebar-logo {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -.3px;
+}
+.sidebar-version {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: rgba(79,142,247,.1);
+  border: 1px solid rgba(79,142,247,.2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.sidebar-base {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 6px;
+  word-break: break-all;
+}
+.nav-section {
+  padding: 14px 18px 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  font-family: var(--display);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  color: var(--text2);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-family: var(--body);
+  font-weight: 400;
+  border-left: 2px solid transparent;
+  transition: all .12s;
+}
+.nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.nav-item.active { color: #fff; border-left-color: var(--accent); background: rgba(79,142,247,.06); }
+.nav-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* MAIN */
+#main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 52px 80px;
+  max-width: 900px;
+}
+.page-title {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -.5px;
+  margin-bottom: 4px;
+}
+.page-subtitle {
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 300;
+  margin-bottom: 36px;
+}
+
+/* SECTION */
+.section {
+  margin-bottom: 52px;
+  scroll-margin-top: 24px;
+}
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.section-icon {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-bottom: 1px;
+}
+.section-title {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -.2px;
+}
+.section-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-left: auto;
+}
+.section-note {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--text2);
+  margin-bottom: 14px;
+  line-height: 1.55;
+}
+.section-note strong { color: var(--text); font-weight: 500; }
+
+/* ENDPOINT */
+.endpoint {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: start;
+  gap: 0 10px;
+  padding: 9px 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  margin-bottom: 3px;
+  transition: background .1s, border-color .1s;
+  cursor: default;
+}
+.endpoint:hover {
+  background: var(--bg3);
+  border-color: var(--border);
+}
+.method {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 0;
+  text-align: right;
+  letter-spacing: .03em;
+  line-height: 1.9;
+}
+.m-GET    { color: var(--GET); }
+.m-POST   { color: var(--POST); }
+.m-PUT    { color: var(--PUT); }
+.m-PATCH  { color: var(--PATCH); }
+.m-DELETE { color: var(--DELETE); }
+
+.route {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.9;
+  word-break: break-all;
+}
+.route .seg   { color: var(--text2); }
+.route .param { color: var(--purple); }
+.route .action{ color: var(--teal); }
+.route .me    { color: var(--pink); }
+
+.desc {
+  font-size: 11.5px;
+  color: var(--text3);
+  text-align: right;
+  line-height: 1.9;
+  white-space: nowrap;
+}
+.tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+.tag-auth   { background: rgba(167,139,250,.12); color: var(--purple); border: 1px solid rgba(167,139,250,.2); }
+.tag-admin  { background: rgba(240,100,100,.1);  color: var(--red);    border: 1px solid rgba(240,100,100,.2); }
+.tag-paged  { background: rgba(61,214,140,.08);  color: var(--green);  border: 1px solid rgba(61,214,140,.15); }
+.tag-search { background: rgba(247,168,79,.08);  color: var(--amber);  border: 1px solid rgba(247,168,79,.15); }
+
+/* GROUP DIVIDER */
+.group-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text3);
+  font-family: var(--display);
+  padding: 14px 14px 4px;
+}
+
+/* LEGEND */
+.legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+  padding: 14px 18px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text2);
+}
+.legend-method {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 46px;
+}
+.base-url-box {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.base-url-label { font-size: 11px; color: var(--text3); font-family: var(--display); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.base-url-val   { font-family: var(--mono); font-size: 13px; color: #fff; }
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div class="sidebar-header">
+    <div>
+      <span class="sidebar-logo">Sportiva</span>
+      <span class="sidebar-version">v1</span>
+    </div>
+    <div class="sidebar-base">/api/v1/</div>
+  </div>
+
+  <div class="nav-section">Core</div>
+  <a class="nav-item active" href="#auth"><span class="nav-dot" style="background:#4f8ef7"></span>Auth</a>
+  <a class="nav-item" href="#users"><span class="nav-dot" style="background:#a78bfa"></span>Users &amp; Profiles</a>
+  <a class="nav-item" href="#followers"><span class="nav-dot" style="background:#f06fac"></span>Followers</a>
+
+  <div class="nav-section">Social</div>
+  <a class="nav-item" href="#posts"><span class="nav-dot" style="background:#3dd68c"></span>Posts</a>
+  <a class="nav-item" href="#comments"><span class="nav-dot" style="background:#3dd68c"></span>Comments &amp; Replies</a>
+  <a class="nav-item" href="#likes"><span class="nav-dot" style="background:#3dd68c"></span>Likes</a>
+
+  <div class="nav-section">Venues</div>
+  <a class="nav-item" href="#clubs"><span class="nav-dot" style="background:#f7a84f"></span>Clubs</a>
+  <a class="nav-item" href="#subscriptions"><span class="nav-dot" style="background:#f7a84f"></span>Subscriptions</a>
+  <a class="nav-item" href="#courts"><span class="nav-dot" style="background:#f7a84f"></span>Courts</a>
+  <a class="nav-item" href="#timeslots"><span class="nav-dot" style="background:#f7a84f"></span>Time Slots</a>
+  <a class="nav-item" href="#bookings"><span class="nav-dot" style="background:#f7a84f"></span>Bookings</a>
+  <a class="nav-item" href="#reviews"><span class="nav-dot" style="background:#f7a84f"></span>Reviews</a>
+
+  <div class="nav-section">Sport</div>
+  <a class="nav-item" href="#matches"><span class="nav-dot" style="background:#38ccc0"></span>Friendly Matches</a>
+  <a class="nav-item" href="#join-requests"><span class="nav-dot" style="background:#38ccc0"></span>Join Requests</a>
+  <a class="nav-item" href="#tournaments"><span class="nav-dot" style="background:#38ccc0"></span>Tournaments</a>
+  <a class="nav-item" href="#tournament-matches"><span class="nav-dot" style="background:#38ccc0"></span>Tournament Matches</a>
+
+  <div class="nav-section">Comms</div>
+  <a class="nav-item" href="#messaging"><span class="nav-dot" style="background:#f06464"></span>Messaging</a>
+  <a class="nav-item" href="#notifications"><span class="nav-dot" style="background:#f06464"></span>Notifications</a>
+
+  <div class="nav-section">Platform</div>
+  <a class="nav-item" href="#memberships"><span class="nav-dot" style="background:#7a8299"></span>Memberships</a>
+  <a class="nav-item" href="#admin"><span class="nav-dot" style="background:#f06464"></span>Admin</a>
+</nav>
+
+<main id="main">
+  <h1 class="page-title">REST API Reference</h1>
+  <p class="page-subtitle">Sportiva Platform — Complete endpoint architecture · 16 modules · Clean RESTful design</p>
+
+  <div class="base-url-box">
+    <span class="base-url-label">Base URL</span>
+    <span class="base-url-val">https://api.sportiva.com/api/v1</span>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-method m-GET">GET</span> Retrieve resource(s)</div>
+    <div class="legend-item"><span class="legend-method m-POST">POST</span> Create / action</div>
+    <div class="legend-item"><span class="legend-method m-PUT">PUT</span> Replace resource</div>
+    <div class="legend-item"><span class="legend-method m-PATCH">PATCH</span> Partial update</div>
+    <div class="legend-item"><span class="legend-method m-DELETE">DELETE</span> Remove resource</div>
+    <div class="legend-item"><span class="tag tag-auth">AUTH</span> Requires JWT</div>
+    <div class="legend-item"><span class="tag tag-admin">ADMIN</span> Admin role only</div>
+    <div class="legend-item"><span class="tag tag-paged">PAGED</span> Returns PagedResponse&lt;T&gt;</div>
+    <div class="legend-item"><span class="tag tag-search">?q=</span> Supports query params</div>
+  </div>
+
+  <!-- AUTH -->
+  <div class="section" id="auth">
+    <div class="section-header">
+      <span class="section-icon" style="background:#4f8ef7"></span>
+      <span class="section-title">Auth</span>
+      <span class="section-count">6 endpoints</span>
+    </div>
+    <div class="section-note">
+      Stateless JWT auth. <strong>POST /register</strong> and <strong>POST /login</strong> return <code>AuthResponse</code> with a short-lived access token and a long-lived refresh token. Refresh tokens are rotated on every use. Email confirmation is a fire-and-forget POST. Password reset is a two-step flow: request a code, then exchange code + new password.
+    </div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/auth/</span>register</span><span class="desc">Create account</span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/auth/</span>login</span><span class="desc">Get tokens</span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/auth/</span>refresh</span><span class="desc">Rotate refresh token</span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/auth/</span>logout</span><span class="desc">Revoke refresh token<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/auth/</span>forgot-password</span><span class="desc">Send reset code</span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/auth/</span>reset-password</span><span class="desc">Exchange code + set password</span></div>
+  </div>
+
+  <!-- USERS -->
+  <div class="section" id="users">
+    <div class="section-header">
+      <span class="section-icon" style="background:#a78bfa"></span>
+      <span class="section-title">Users &amp; Profiles</span>
+      <span class="section-count">7 endpoints</span>
+    </div>
+    <div class="section-note">
+      <strong>/me</strong> always refers to the authenticated caller. <strong>GET /users/{userId}</strong> is the public profile view. Search lives on <strong>/users</strong> with <code>?q=</code>. Avatar upload is a PATCH to keep the profile PATCH partial and clean.
+    </div>
+    <div class="group-label">Current user</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span></span><span class="desc">My profile<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/</span><span class="me">me</span></span><span class="desc">Update my profile<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/</span>avatar</span><span class="desc">Upload profile picture<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/</span>cover</span><span class="desc">Upload cover image<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="group-label">Public user lookup</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/users</span></span><span class="desc">Search users<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?q=</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/users/</span><span class="param">{userId}</span></span><span class="desc">Public profile</span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/users/</span><span class="param">{userId}</span><span class="seg">/posts</span></span><span class="desc">User's posts<span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- FOLLOWERS -->
+  <div class="section" id="followers">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f06fac"></span>
+      <span class="section-title">Followers</span>
+      <span class="section-count">6 endpoints</span>
+    </div>
+    <div class="section-note">
+      Follow/unfollow is a <strong>POST/DELETE on the relationship resource</strong>: <code>/users/{userId}/follow</code>. Each user only accesses their own lists via <strong>/me/followers</strong> and <strong>/me/following</strong>.
+    </div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/users/</span><span class="param">{userId}</span><span class="seg">/</span><span class="action">follow</span></span><span class="desc">Follow a user<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/users/</span><span class="param">{userId}</span><span class="seg">/</span><span class="action">follow</span></span><span class="desc">Unfollow a user<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/users/</span><span class="param">{userId}</span><span class="seg">/followers</span></span><span class="desc">User's followers<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/users/</span><span class="param">{userId}</span><span class="seg">/following</span></span><span class="desc">Accounts user follows<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/followers</span></span><span class="desc">My followers<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/following</span></span><span class="desc">Accounts I follow<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- POSTS -->
+  <div class="section" id="posts">
+    <div class="section-header">
+      <span class="section-icon" style="background:#3dd68c"></span>
+      <span class="section-title">Posts</span>
+      <span class="section-count">6 endpoints</span>
+    </div>
+    <div class="section-note">
+      <strong>GET /posts</strong> returns the authenticated user's social feed. Feed supports cursor-based pagination via <code>?before=</code> for infinite scroll.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/posts</span></span><span class="desc">Social feed<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/posts</span></span><span class="desc">Create post<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span></span><span class="desc">Get single post</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span></span><span class="desc">Edit post<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span></span><span class="desc">Delete post<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/posts</span></span><span class="desc">My posts<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- COMMENTS -->
+  <div class="section" id="comments">
+    <div class="section-header">
+      <span class="section-icon" style="background:#3dd68c"></span>
+      <span class="section-title">Comments &amp; Replies</span>
+      <span class="section-count">10 endpoints</span>
+    </div>
+    <div class="section-note">
+      Comments are a true child resource of posts. Replies are nested under comments. <strong>Max one level of nesting</strong> — replies-of-replies go to the same comment (flat threading).
+    </div>
+    <div class="group-label">Comments</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments</span></span><span class="desc">List comments<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments</span></span><span class="desc">Add comment<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span></span><span class="desc">Edit comment<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span></span><span class="desc">Delete comment<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="group-label">Replies</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span><span class="seg">/replies</span></span><span class="desc">List replies<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span><span class="seg">/replies</span></span><span class="desc">Add reply<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span><span class="seg">/replies/</span><span class="param">{replyId}</span></span><span class="desc">Edit reply<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span><span class="seg">/replies/</span><span class="param">{replyId}</span></span><span class="desc">Delete reply<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="group-label">Comment &amp; reply likes</div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span><span class="seg">/</span><span class="action">like</span></span><span class="desc">Like comment<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/comments/</span><span class="param">{commentId}</span><span class="seg">/</span><span class="action">like</span></span><span class="desc">Unlike comment<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- LIKES -->
+  <div class="section" id="likes">
+    <div class="section-header">
+      <span class="section-icon" style="background:#3dd68c"></span>
+      <span class="section-title">Post Likes</span>
+      <span class="section-count">3 endpoints</span>
+    </div>
+    <div class="section-note">
+      Like/unlike are POST/DELETE on <strong>/posts/{postId}/like</strong> — treating the like as a resource on the post, consistent with the follow/unfollow pattern.
+    </div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/</span><span class="action">like</span></span><span class="desc">Like post<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/</span><span class="action">like</span></span><span class="desc">Unlike post<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/posts/</span><span class="param">{postId}</span><span class="seg">/likes</span></span><span class="desc">Who liked this<span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- CLUBS -->
+  <div class="section" id="clubs">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f7a84f"></span>
+      <span class="section-title">Clubs</span>
+      <span class="section-count">7 endpoints</span>
+    </div>
+    <div class="section-note">
+      A club is a top-level resource — independently searchable and bookable. <strong>/me/clubs</strong> returns clubs owned by the authenticated user. Status toggle uses a dedicated <strong>PATCH .../status</strong> action.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs</span></span><span class="desc">Browse clubs<span class="tag tag-paged">PAGED</span><span class="tag tag-search">?city= ?sport=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/clubs</span></span><span class="desc">Create club<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span></span><span class="desc">Club detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span></span><span class="desc">Update club<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span></span><span class="desc">Delete club<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/</span><span class="action">status</span></span><span class="desc">Toggle active/inactive<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/clubs</span></span><span class="desc">My clubs<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- SUBSCRIPTIONS -->
+  <div class="section" id="subscriptions">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f7a84f"></span>
+      <span class="section-title">Subscription Plans &amp; Club Subscriptions</span>
+      <span class="section-count">10 endpoints</span>
+    </div>
+    <div class="section-note">
+      <strong>Plans</strong> are platform-level resources managed by admins. <strong>Club subscriptions</strong> are nested under clubs. The <strong>renew</strong> action POSTs a new subscription to keep history intact.
+    </div>
+    <div class="group-label">Plans (admin-managed)</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/subscription-plans</span></span><span class="desc">List all plans</span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/subscription-plans</span></span><span class="desc">Create plan<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/subscription-plans/</span><span class="param">{planId}</span></span><span class="desc">Plan detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/subscription-plans/</span><span class="param">{planId}</span></span><span class="desc">Update plan<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/subscription-plans/</span><span class="param">{planId}</span></span><span class="desc">Archive plan<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="group-label">Club subscriptions</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/subscription</span></span><span class="desc">Active subscription<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/subscriptions</span></span><span class="desc">Subscription history<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/subscriptions</span></span><span class="desc">Subscribe to plan<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/subscriptions/</span><span class="action">renew</span></span><span class="desc">Renew subscription<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/subscriptions/</span><span class="action">cancel</span></span><span class="desc">Cancel subscription<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- COURTS -->
+  <div class="section" id="courts">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f7a84f"></span>
+      <span class="section-title">Courts</span>
+      <span class="section-count">8 endpoints</span>
+    </div>
+    <div class="section-note">
+      Courts are nested under clubs. <strong>GET /courts</strong> also exists as a top-level search for the "find a court near me" discovery flow with location/sport filters.
+    </div>
+    <div class="group-label">Discovery (flat)</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/courts</span></span><span class="desc">Search all courts<span class="tag tag-paged">PAGED</span><span class="tag tag-search">?sport= ?city= ?date=</span></span></div>
+    <div class="group-label">Club-scoped</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts</span></span><span class="desc">Club's courts<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts</span></span><span class="desc">Add court<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts/</span><span class="param">{courtId}</span></span><span class="desc">Court detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts/</span><span class="param">{courtId}</span></span><span class="desc">Update court<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts/</span><span class="param">{courtId}</span></span><span class="desc">Remove court<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/</span><span class="action">status</span></span><span class="desc">Toggle active<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/availability</span></span><span class="desc">Open slots<span class="tag tag-search">?date=</span></span></div>
+  </div>
+
+  <!-- TIME SLOTS -->
+  <div class="section" id="timeslots">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f7a84f"></span>
+      <span class="section-title">Time Slots</span>
+      <span class="section-count">6 endpoints</span>
+    </div>
+    <div class="section-note">
+      Time slots are nested under courts. <code>POST /bulk</code> lets court managers schedule entire days or weeks at once — avoids N round-trips from the management dashboard.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/time-slots</span></span><span class="desc">List slots<span class="tag tag-search">?date= ?available=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/time-slots</span></span><span class="desc">Create slot<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/time-slots/</span><span class="action">bulk</span></span><span class="desc">Bulk create slots<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/time-slots/</span><span class="param">{slotId}</span></span><span class="desc">Slot detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/time-slots/</span><span class="param">{slotId}</span></span><span class="desc">Update slot<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/time-slots/</span><span class="param">{slotId}</span></span><span class="desc">Delete slot<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- BOOKINGS -->
+  <div class="section" id="bookings">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f7a84f"></span>
+      <span class="section-title">Bookings</span>
+      <span class="section-count">7 endpoints</span>
+    </div>
+    <div class="section-note">
+      Bookings are a <strong>top-level resource</strong> — not nested under courts. <strong>/me/bookings</strong> is the primary mobile screen. Cancellation is a POST action (not DELETE) because the booking record is retained for history and review eligibility.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/bookings</span></span><span class="desc">My bookings<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?status=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/bookings</span></span><span class="desc">Create booking<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/bookings/</span><span class="param">{bookingId}</span></span><span class="desc">Booking detail<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/bookings/</span><span class="param">{bookingId}</span><span class="seg">/</span><span class="action">cancel</span></span><span class="desc">Cancel booking<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/bookings</span></span><span class="desc">Court's bookings<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?date=</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/bookings</span></span><span class="desc">Club's bookings<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/bookings/</span><span class="param">{bookingId}</span><span class="seg">/receipt</span></span><span class="desc">Booking receipt<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- REVIEWS -->
+  <div class="section" id="reviews">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f7a84f"></span>
+      <span class="section-title">Reviews</span>
+      <span class="section-count">8 endpoints</span>
+    </div>
+    <div class="section-note">
+      Reviews are created via a booking ID — enforces <strong>one booking → one review</strong> server-side. Reading reviews is by court or by club. <strong>/me/reviews</strong> supports the user's history screen.
+    </div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/reviews</span></span><span class="desc">Submit review (via bookingId)<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/reviews/</span><span class="param">{reviewId}</span></span><span class="desc">Review detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/reviews/</span><span class="param">{reviewId}</span></span><span class="desc">Edit review<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/reviews/</span><span class="param">{reviewId}</span></span><span class="desc">Delete review<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/reviews</span></span><span class="desc">Court reviews<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/clubs/</span><span class="param">{clubId}</span><span class="seg">/reviews</span></span><span class="desc">Club reviews<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/reviews</span></span><span class="desc">My reviews<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/bookings/</span><span class="param">{bookingId}</span><span class="seg">/review</span></span><span class="desc">Review for booking<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- FRIENDLY MATCHES -->
+  <div class="section" id="matches">
+    <div class="section-header">
+      <span class="section-icon" style="background:#38ccc0"></span>
+      <span class="section-title">Friendly Matches</span>
+      <span class="section-count">9 endpoints</span>
+    </div>
+    <div class="section-note">
+      Friendly matches are <strong>top-level</strong> — discovery feed spans all venues. The <strong>leave</strong> action is a POST because it may trigger downstream effects like promoting a waitlist member.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/friendly-matches</span></span><span class="desc">Browse open matches<span class="tag tag-paged">PAGED</span><span class="tag tag-search">?sport= ?date= ?city=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/friendly-matches</span></span><span class="desc">Create match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span></span><span class="desc">Match detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span></span><span class="desc">Update match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span></span><span class="desc">Cancel match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/participants</span></span><span class="desc">Participant list</span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/</span><span class="action">leave</span></span><span class="desc">Leave match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/friendly-matches</span></span><span class="desc">My matches<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?role=organizer|participant</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/courts/</span><span class="param">{courtId}</span><span class="seg">/friendly-matches</span></span><span class="desc">Matches at court<span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- JOIN REQUESTS -->
+  <div class="section" id="join-requests">
+    <div class="section-header">
+      <span class="section-icon" style="background:#38ccc0"></span>
+      <span class="section-title">Match Join Requests</span>
+      <span class="section-count">7 endpoints</span>
+    </div>
+    <div class="section-note">
+      <strong>Accept</strong> and <strong>reject</strong> are separate POST actions rather than a status PATCH — they have distinct side effects (slot decrement, notifications) and the explicit verb is safer to authorise.
+    </div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/</span><span class="action">join</span></span><span class="desc">Request to join<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/join-requests</span></span><span class="desc">Pending requests<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/join-requests/</span><span class="param">{requestId}</span></span><span class="desc">Request detail<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/join-requests/</span><span class="param">{requestId}</span><span class="seg">/</span><span class="action">accept</span></span><span class="desc">Accept player<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/join-requests/</span><span class="param">{requestId}</span><span class="seg">/</span><span class="action">reject</span></span><span class="desc">Reject player<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/friendly-matches/</span><span class="param">{matchId}</span><span class="seg">/join-requests/</span><span class="param">{requestId}</span></span><span class="desc">Withdraw request<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/join-requests</span></span><span class="desc">My join requests<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?status=</span></span></div>
+  </div>
+
+  <!-- TOURNAMENTS -->
+  <div class="section" id="tournaments">
+    <div class="section-header">
+      <span class="section-icon" style="background:#38ccc0"></span>
+      <span class="section-title">Tournaments</span>
+      <span class="section-count">9 endpoints</span>
+    </div>
+    <div class="section-note">
+      Tournaments are top-level — cross-venue discovery. <strong>JOIN and LEAVE</strong> are POST actions. Stats come from the tournament detail response to avoid an extra round-trip.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/tournaments</span></span><span class="desc">Browse tournaments<span class="tag tag-paged">PAGED</span><span class="tag tag-search">?sport= ?status= ?city=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/tournaments</span></span><span class="desc">Create tournament<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span></span><span class="desc">Tournament detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span></span><span class="desc">Update tournament<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span></span><span class="desc">Cancel tournament<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/</span><span class="action">join</span></span><span class="desc">Register for tournament<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/</span><span class="action">leave</span></span><span class="desc">Withdraw from tournament<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/participants</span></span><span class="desc">Participant list<span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/tournaments</span></span><span class="desc">My tournaments<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+  </div>
+
+  <!-- TOURNAMENT MATCHES -->
+  <div class="section" id="tournament-matches">
+    <div class="section-header">
+      <span class="section-icon" style="background:#38ccc0"></span>
+      <span class="section-title">Tournament Matches</span>
+      <span class="section-count">6 endpoints</span>
+    </div>
+    <div class="section-note">
+      Always nested under their tournament. <strong>set-winner</strong> is an explicit POST action — it triggers bracket progression logic that should be distinct from a plain field update.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/matches</span></span><span class="desc">Bracket / match list<span class="tag tag-search">?round=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/matches</span></span><span class="desc">Schedule match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/matches/</span><span class="param">{matchId}</span></span><span class="desc">Match detail</span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/matches/</span><span class="param">{matchId}</span></span><span class="desc">Update match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/matches/</span><span class="param">{matchId}</span></span><span class="desc">Remove match<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/tournaments/</span><span class="param">{tournamentId}</span><span class="seg">/matches/</span><span class="param">{matchId}</span><span class="seg">/</span><span class="action">set-winner</span></span><span class="desc">Record result<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- MESSAGING -->
+  <div class="section" id="messaging">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f06464"></span>
+      <span class="section-title">Messaging &amp; Conversations</span>
+      <span class="section-count">8 endpoints</span>
+    </div>
+    <div class="section-note">
+      Conversations are identified by the <strong>other party's userId</strong> — no separate creation step. Sending to a new user auto-creates the conversation. <strong>mark-read</strong> batch-marks all messages as read in one call.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/conversations</span></span><span class="desc">Inbox<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span></span><span class="desc">Conversation with user<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span><span class="seg">/messages</span></span><span class="desc">Message history<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?before=</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span><span class="seg">/messages</span></span><span class="desc">Send message<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span><span class="seg">/messages/</span><span class="param">{messageId}</span></span><span class="desc">Single message<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span><span class="seg">/messages/</span><span class="param">{messageId}</span></span><span class="desc">Delete message<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span><span class="seg">/</span><span class="action">mark-read</span></span><span class="desc">Mark all as read<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/conversations/</span><span class="param">{userId}</span></span><span class="desc">Archive conversation<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="section" id="notifications">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f06464"></span>
+      <span class="section-title">Notifications</span>
+      <span class="section-count">8 endpoints</span>
+    </div>
+    <div class="section-note">
+      All notification endpoints live under <strong>/me/</strong>. The <strong>counters</strong> endpoint is a lightweight poll for the bell badge. Preferences use a <strong>bulk PUT</strong> — client sends the full preference matrix at once.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notifications</span></span><span class="desc">Notification list<span class="tag tag-auth">AUTH</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?unread=true</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notifications/counters</span></span><span class="desc">Unread badge count<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notifications/</span><span class="param">{notificationId}</span><span class="seg">/</span><span class="action">read</span></span><span class="desc">Mark one as read<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notifications/</span><span class="action">mark-all-read</span></span><span class="desc">Mark all as read<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notifications/</span><span class="param">{notificationId}</span></span><span class="desc">Delete notification<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notifications</span></span><span class="desc">Clear all<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notification-preferences</span></span><span class="desc">Preferences<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-PUT">PUT</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/notification-preferences</span></span><span class="desc">Bulk update preferences<span class="tag tag-auth">AUTH</span></span></div>
+  </div>
+
+  <!-- MEMBERSHIPS -->
+  <div class="section" id="memberships">
+    <div class="section-header">
+      <span class="section-icon" style="background:#7a8299"></span>
+      <span class="section-title">Membership Upgrade Requests</span>
+      <span class="section-count">7 endpoints</span>
+    </div>
+    <div class="section-note">
+      Regular users interact via <strong>/me/membership-request</strong> (singular — one active request at a time). Admins use <strong>/membership-requests</strong> to manage the queue. Approve and reject carry distinct side effects.
+    </div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/</span><span class="me">me</span><span class="seg">/membership-request</span></span><span class="desc">My current request<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/membership-requests</span></span><span class="desc">Submit request<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/membership-requests/</span><span class="param">{requestId}</span></span><span class="desc">Withdraw request<span class="tag tag-auth">AUTH</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/membership-requests</span></span><span class="desc">All requests<span class="tag tag-admin">ADMIN</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?status=</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/membership-requests/</span><span class="param">{requestId}</span></span><span class="desc">Request detail<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/membership-requests/</span><span class="param">{requestId}</span><span class="seg">/</span><span class="action">approve</span></span><span class="desc">Approve request<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/membership-requests/</span><span class="param">{requestId}</span><span class="seg">/</span><span class="action">reject</span></span><span class="desc">Reject with note<span class="tag tag-admin">ADMIN</span></span></div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="section" id="admin">
+    <div class="section-header">
+      <span class="section-icon" style="background:#f06464"></span>
+      <span class="section-title">Admin</span>
+      <span class="section-count">12 endpoints</span>
+    </div>
+    <div class="section-note">
+      All admin endpoints are prefixed with <strong>/admin/</strong> — a dedicated sub-path that can be protected at the gateway level (IP allowlist, separate auth middleware) independently of the public API.
+    </div>
+    <div class="group-label">User management</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/admin/users</span></span><span class="desc">All users<span class="tag tag-admin">ADMIN</span><span class="tag tag-paged">PAGED</span><span class="tag tag-search">?q= ?role=</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/admin/users/</span><span class="param">{userId}</span></span><span class="desc">User detail<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/admin/users/</span><span class="param">{userId}</span><span class="seg">/</span><span class="action">ban</span></span><span class="desc">Ban user<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/admin/users/</span><span class="param">{userId}</span><span class="seg">/</span><span class="action">unban</span></span><span class="desc">Restore access<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-PATCH">PATCH</span><span class="route"><span class="seg">/admin/users/</span><span class="param">{userId}</span><span class="seg">/role</span></span><span class="desc">Change user role<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="group-label">Content moderation</div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/admin/posts/</span><span class="param">{postId}</span></span><span class="desc">Remove post<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-DELETE">DELETE</span><span class="route"><span class="seg">/admin/reviews/</span><span class="param">{reviewId}</span></span><span class="desc">Remove review<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-POST">POST</span><span class="route"><span class="seg">/admin/clubs/</span><span class="param">{clubId}</span><span class="seg">/</span><span class="action">suspend</span></span><span class="desc">Suspend club<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="group-label">Platform stats</div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/admin/stats/overview</span></span><span class="desc">Platform KPIs<span class="tag tag-admin">ADMIN</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/admin/stats/bookings</span></span><span class="desc">Booking analytics<span class="tag tag-admin">ADMIN</span><span class="tag tag-search">?from= ?to=</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/admin/stats/revenue</span></span><span class="desc">Revenue report<span class="tag tag-admin">ADMIN</span><span class="tag tag-search">?from= ?to=</span></span></div>
+    <div class="endpoint"><span class="method m-GET">GET</span><span class="route"><span class="seg">/admin/stats/signups</span></span><span class="desc">Growth metrics<span class="tag tag-admin">ADMIN</span><span class="tag tag-search">?from= ?to=</span></span></div>
+  </div>
+
+</main>
+
+<script>
+const sections = document.querySelectorAll('.section');
+const navItems = document.querySelectorAll('.nav-item');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navItems.forEach(n => n.classList.remove('active'));
+      const active = document.querySelector('.nav-item[href="#' + e.target.id + '"]');
+      if (active) active.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
