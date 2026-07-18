@@ -1,0 +1,20 @@
+- [x] **Quick Fixes**
+  - [x] Remove duplicate "Pricing" link, keep "Become Owner" pointing to `/pricing` in guest navbar / mobile nav
+- [x] **Owner Layout & Navigation**
+  - [x] Create `OwnerLayout.jsx` with collapsible sidebar, active club selector, and user profile summary
+- [x] **Owner Dashboard Views**
+  - [x] Create `OwnerDashboardHome.jsx` (Key metrics, charts, quick actions)
+  - [x] Create `OwnerTodayView.jsx` (Today's schedule, court occupancy grid, next booking)
+  - [x] Create `OwnerClubsView.jsx` (Refactored from `ClubManagementView.jsx` - list, add, edit, status toggle, delete)
+  - [x] Create `OwnerCourtsView.jsx` (List courts per club, add, edit, status toggle, delete)
+  - [x] Create `OwnerScheduleView.jsx` (Visual grid of slots, generate weekly slots, toggle slot availability)
+  - [x] Create `OwnerBookingsView.jsx` (Manage club bookings, filter status/date, accept/reject requests)
+  - [x] Create `OwnerMatchesView.jsx` (Monitor friendly matches hosted on courts)
+  - [x] Create `OwnerTournamentsView.jsx` (Monitor tournaments hosted on courts)
+  - [x] Create `OwnerReviewsView.jsx` (Track player reviews per club/court)
+  - [x] Create `OwnerSubscriptionView.jsx` (Manage subscription plans, check active status, renew/cancel)
+- [x] **Routing Registration**
+  - [x] Update `App.jsx` to register owner views under `OwnerLayout` with path guards
+- [x] **Verification & Polish**
+  - [x] Run build test
+  - [x] Manual walkthrough

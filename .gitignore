@@ -1,0 +1,20 @@
+# Dependency directories
+node_modules/
+node-portable/
+
+# Build outputs
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE folders
+.vs/
+.idea/
+.vscode/
+
+# Local uploads and settings
+SportivaApi/Sportiva/wwwroot/uploads/
+appsettings.Development.json
